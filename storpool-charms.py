@@ -13,6 +13,7 @@ base_url='https://github.com/storpool'
 subdir='storpool-charms'
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-]* ) $', re.X)
 
+
 def checkout_repository(name):
 	url = '{base}/{name}.git'.format(base=base_url, name=name)
 	try:
@@ -26,11 +27,13 @@ def checkout_repository(name):
 	except Exception:
 		exit('Could not check out the {name} module'.format(name=name))
 
+
 def is_file_not_found(e):
 	try:
 		return isinstance(e, FileNotFoundError)
 	except NameError:
 		return (isinstance(e, IOError) or isinstance(e, OSError)) and e.errno == os.errno.ENOENT
+
 
 def checkout_recursive(name, layers_required=False):
 	checkout_repository(name)
@@ -63,12 +66,14 @@ def checkout_recursive(name, layers_required=False):
 		else:
 			checkout_recursive('{t}-{n}'.format(t=e_type, n=e_name))
 
+
 def checkout_charm_recursive(name):
 	print('Checking out the {name} charm and its dependencies'.format(name=name))
 	checkout_recursive(name, layers_required=True)
 	os.chdir('../../charms')
 	print('Done with the {name} charm!'.format(name=name))
 	print('')
+
 
 if len(sys.argv) != 2:
 	exit('Usage: storpool-charms path/to/parent/dir\nExample: storpool-charms .\nA {subdir} subdirectory will be created in the specified directory.'.format(subdir=subdir))
