@@ -46,4 +46,7 @@ for python in python2 python3; do
 
 	do_test "$python" "-d $testdir -N pull"
 	do_test "$python" "-d $testdir pull"
+
+	do_test "$python" "-d $testdir -N build"
+	do_test "$python" "-d $testdir build"
 done
