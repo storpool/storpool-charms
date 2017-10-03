@@ -81,7 +81,7 @@ def is_file_not_found(e):
 
 def parse_layers(cfg, to_process, layers_required):
 	if cfg.noop:
-		sp_msg('(would examine the "layer.yaml" file and check out layers and interfaces recursively)')
+		sp_msg('(would examine the "layer.yaml" file and process layers and interfaces recursively)')
 		return []
 
 	try:
@@ -143,9 +143,6 @@ def sp_recurse(cfg, process_charm, process_element):
 			process_element(cfg, elem, to_process)
 			processed[elem.fname] = elem
 
-	sp_msg('The StorPool charms were checked out into {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
-	sp_msg('')
-
 
 def cmd_checkout(cfg):
 	try:
@@ -171,23 +168,59 @@ def cmd_checkout(cfg):
 		checkout_element(cfg, elem.fname, to_process)
 
 	sp_recurse(cfg, process_charm=process_charm, process_element=process_element)
+	sp_msg('The StorPool charms were checked out into {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
+	sp_msg('')
+
+
+def cmd_pull(cfg):
+	subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
+	sp_msg('Updating the charms in the {d} directory'.format(d=subdir_full))
+	try:
+		sp_chdir(cfg, subdir_full)
+	except Exception as e:
+		if is_file_not_found(e):
+			exit('The {d} directory does not seem to exist!'.format(d=subdir_full))
+		raise
+
+	def process_element(cfg, elem, to_process):
+		sp_msg('Updating the {name} {type}'.format(name=elem.name, type=elem.type))
+		sp_chdir(cfg, elem.fname)
+		sp_run(cfg, ['git', 'pull', '--ff-only'])
+		parse_layers(cfg, to_process, False)
+		sp_chdir(cfg, '../')
+
+	def process_charm(name, to_process):
+		elem = Element(
+			name=name,
+			type='charm',
+			parent_dir='',
+			fname=name,
+			exists=True,
+		)
+		process_element(cfg, elem, to_process)
+
+	sp_recurse(cfg, process_charm=process_charm, process_element=process_element)
+	sp_msg('The StorPool charms were updated in {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
+	sp_msg('')
 
 
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
 	storpool-charms [-N] [-d basedir] checkout
+	storpool-charms [-N] [-d basedir] pull
 
 A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
-parser.add_argument('command', choices=['checkout'])
+parser.add_argument('command', choices=['checkout', 'pull'])
 
 args = parser.parse_args()
 cfg = Config(basedir = args.basedir, noop = args.noop)
 
 commands = {
 	'checkout': cmd_checkout,
+	'pull': cmd_pull,
 }
 commands[args.command](cfg)

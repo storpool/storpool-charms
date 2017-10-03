@@ -43,4 +43,7 @@ for python in python2 python3; do
 		printf '"%s checkout" did not create the expected directories\n' "$python" 1>&2
 		exit 1
 	fi
+
+	do_test "$python" "-d $testdir -N pull"
+	do_test "$python" "-d $testdir pull"
 done
