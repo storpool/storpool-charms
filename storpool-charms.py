@@ -59,7 +59,9 @@ def sp_run(cfg, command):
 def checkout_repository(cfg, name):
 	url = '{base}/{name}.git'.format(base=base_url, name=name)
 	try:
-		if not requests.request('GET', url).ok:
+		if cfg.noop:
+			sp_msg('(would send an HTTP request to {url})'.format(url=url))
+		elif not requests.request('GET', url).ok:
 			exit('The {name} StorPool repository does not seem to exist on GitHub!'.format(name=name))
 	except Exception as e:
 		exit('Could not check for the existence of the {name} StorPool repository on GitHub: {e}'.format(name=name, e=e))
