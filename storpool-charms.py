@@ -8,28 +8,64 @@ import re
 import requests
 import subprocess
 import yaml
+import six
 import sys
 
 base_url='https://github.com/storpool'
 subdir='storpool-charms'
+charm_names=['charm-storpool-block', 'charm-cinder-storpool', 'charm-storpool-inventory']
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-]* ) $', re.X)
 
 
 class Config(object):
-	def __init__(self, basedir):
+	def __init__(self, basedir, noop):
 		self.basedir = basedir
+		self.noop = noop
 
 
-def checkout_repository(name):
+class Element(object):
+	def __init__(self, name, type, parent_dir, fname, exists):
+		self.name = name
+		self.type = type
+		self.parent_dir = parent_dir
+		self.fname = fname
+		self.exists = exists
+
+
+def sp_msg(s):
+	print(s)
+
+def sp_chdir(cfg, dirname):
+	if cfg.noop:
+		sp_msg("# chdir -- '{dirname}'".format(dirname=dirname))
+		return
+
+	os.chdir(dirname)
+
+def sp_mkdir(cfg, dirname):
+	if cfg.noop:
+		sp_msg("# mkdir -- '{dirname}'".format(dirname=dirname))
+		return
+
+	os.mkdir(dirname)
+
+def sp_run(cfg, command):
+	if cfg.noop:
+		sp_msg("# {command}".format(command=' '.join(command)))
+		return
+
+	subprocess.check_call(command)
+
+def checkout_repository(cfg, name):
 	url = '{base}/{name}.git'.format(base=base_url, name=name)
 	try:
 		if not requests.request('GET', url).ok:
 			exit('The {name} StorPool repository does not seem to exist on GitHub!'.format(name=name))
 	except Exception as e:
 		exit('Could not check for the existence of the {name} StorPool repository on GitHub: {e}'.format(name=name, e=e))
-	print('Checking out {url}'.format(url=url))
+	sp_msg('Checking out {url}'.format(url=url))
 	try:
-		subprocess.check_call(['git', 'clone', '--', url]);
+		sp_run(cfg, ['git', 'clone', '--', url]);
 	except Exception:
 		exit('Could not check out the {name} module'.format(name=name))
 
@@ -41,10 +77,10 @@ def is_file_not_found(e):
 		return (isinstance(e, IOError) or isinstance(e, OSError)) and e.errno == os.errno.ENOENT
 
 
-def checkout_recursive(name, layers_required=False):
-	checkout_repository(name)
-	# This is done mainly for the "../" in the loop below, but oh well.
-	os.chdir(name)
+def parse_layers(cfg, to_process, layers_required):
+	if cfg.noop:
+		sp_msg('(would examine the "layer.yaml" file and check out layers and interfaces recursively)')
+		return []
 
 	try:
 		with open('layer.yaml', mode='r') as f:
@@ -60,92 +96,94 @@ def checkout_recursive(name, layers_required=False):
 			exit('Invalid value "{elem}" in the {name} "includes" directive!'.format(name=name, elem=elem))
 		(e_type, e_name) = (m.groupdict()['type'], m.groupdict()['name'])
 
-		print('Processing {t} "{n}"'.format(t=e_type, n=e_name))
-		os.chdir('../../{t}s'.format(t=e_type))
-		dname = '{t}-{n}'.format(t=e_type, n=e_name)
+		parent_dir = '../{t}s'.format(t=e_type)
+		fname = '{t}-{n}'.format(t=e_type, n=e_name)
+		dname = '{parent}/{fname}'.format(parent=parent_dir, fname=fname)
+		exists = os.path.exists(dname)
+		if exists and not os.path.isdir(dname):
+			exit('Something named {dname} exists and it is not a directory!'.format(dname=dname))
+		to_process.append(Element(
+			name=e_name,
+			type=e_type,
+			parent_dir=parent_dir,
+			fname=fname,
+			exists=exists,
+		))
 
-		if os.path.exists(dname):
-			if not os.path.isdir(dname):
-				exit('Something named {t}/{n} exists and it is not a directory!'.format(t=e_type, n=e_name))
-			print('The {n} {t} has already been checked out.'.format(n=e_name, t=e_type))
-			os.chdir(dname)
-		else:
-			checkout_recursive('{t}-{n}'.format(t=e_type, n=e_name))
 
+def checkout_element(cfg, name, to_process, layers_required=False):
+	checkout_repository(cfg, name)
+	sp_chdir(cfg, name)
+	parse_layers(cfg, to_process, layers_required)
+	sp_chdir(cfg, '../../charms')
 
-def checkout_charm_recursive(name):
-	print('Checking out the {name} charm and its dependencies'.format(name=name))
-	checkout_recursive(name, layers_required=True)
-	os.chdir('../../charms')
-	print('Done with the {name} charm!'.format(name=name))
-	print('')
+def sp_recurse(cfg, process_charm, process_element):
+	sp_chdir(cfg, 'charms')
+
+	to_process = []
+	for name in charm_names:
+		process_charm(name, to_process)
+
+	processed = {}
+	while True:
+		if not to_process:
+			sp_msg('No more layers or interfaces to process')
+			break
+		processing = six.itervalues(dict(map(
+			lambda e: (e.fname, e),
+			filter(
+				lambda e: e.fname not in processed and not e.exists,
+				to_process)
+		)))
+		to_process = []
+		for elem in processing:
+			sp_chdir(cfg, elem.parent_dir)
+			process_element(cfg, elem, to_process)
+			processed[elem.fname] = elem
+
+	sp_msg('The StorPool charms were checked out into {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
+	sp_msg('')
 
 
 def cmd_checkout(cfg):
 	try:
-		os.chdir(cfg.basedir)
+		sp_chdir(cfg, cfg.basedir)
 	except Exception as e:
 		if is_file_not_found(e):
 			exit('The {d} directory does not seem to exist!'.format(d=cfg.basedir))
 		raise
 
-	print('Recreating the {subdir}/ tree'.format(subdir=subdir))
-	subprocess.check_call(['rm', '-rf', '--', subdir])
-	os.mkdir(subdir)
-	os.chdir(subdir)
+	sp_msg('Recreating the {subdir}/ tree'.format(subdir=subdir))
+	sp_run(cfg, ['rm', '-rf', '--', subdir])
+	sp_mkdir(cfg, subdir)
+	sp_chdir(cfg, subdir)
 	for comp in ('layers', 'interfaces', 'charms'):
-		os.mkdir(comp)
-	os.chdir('charms')
+		sp_mkdir(cfg, comp)
+	
+	def process_charm(name, to_process):
+		sp_msg('Checking out the {name} charm'.format(name=name))
+		checkout_element(cfg, name, to_process, layers_required=True)
 
-	checkout_charm_recursive('charm-storpool-block')
-	checkout_charm_recursive('charm-cinder-storpool')
-	checkout_charm_recursive('charm-storpool-inventory')
+	def process_element(cfg, elem, to_process):
+		sp_msg('Checking out the {name} {type}'.format(name=elem.name, type=elem.type))
+		checkout_element(cfg, elem.fname, to_process)
 
-	print('All done!')
-	print('')
-
-	print('###################################################')
-	print('')
-	print('#!/bin/sh')
-	print('')
-	print('set -e')
-	print('')
-
-	os.chdir('../layers')
-	print("export LAYER_PATH='{path}'".format(path=os.getcwd()))
-	os.chdir('../interfaces')
-	print("export INTERFACE_PATH='{path}'".format(path=os.getcwd()))
-	print('')
-
-	os.chdir('../charms/charm-storpool-block')
-	print("cd -- '{path}'".format(path=os.getcwd()))
-	print('make && make deploy')
-	print('')
-
-	os.chdir('../charm-cinder-storpool')
-	print("cd -- '{path}'".format(path=os.getcwd()))
-	print('make && make deploy')
-	print('')
-
-	os.chdir('../charm-storpool-inventory')
-	print("cd -- '{path}'".format(path=os.getcwd()))
-	print('make && make deploy')
-	print('')
+	sp_recurse(cfg, process_charm=process_charm, process_element=process_element)
 
 
-# FIXME: more commands, options parsing
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
-	storpool-charms [-d basedir] checkout
+	storpool-charms [-N] [-d basedir] checkout
 
 A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
+parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
 parser.add_argument('command', choices=['checkout'])
 
 args = parser.parse_args()
-cfg = Config(basedir = args.basedir)
+cfg = Config(basedir = args.basedir, noop = args.noop)
 
 commands = {
 	'checkout': cmd_checkout,
