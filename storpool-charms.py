@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import argparse
 import os
 import re
 import requests
@@ -12,6 +13,11 @@ import sys
 base_url='https://github.com/storpool'
 subdir='storpool-charms'
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-]* ) $', re.X)
+
+
+class Config(object):
+	def __init__(self, basedir):
+		self.basedir = basedir
 
 
 def checkout_repository(name):
@@ -75,55 +81,73 @@ def checkout_charm_recursive(name):
 	print('')
 
 
-if len(sys.argv) != 2:
-	exit('Usage: storpool-charms path/to/parent/dir\nExample: storpool-charms .\nA {subdir} subdirectory will be created in the specified directory.'.format(subdir=subdir))
-d = sys.argv[1]
-try:
-	os.chdir(d)
-except Exception as e:
-	if is_file_not_found(e):
-		exit('The {d} directory does not seem to exist!'.format(d=d))
-	raise
+def cmd_checkout(cfg):
+	try:
+		os.chdir(cfg.basedir)
+	except Exception as e:
+		if is_file_not_found(e):
+			exit('The {d} directory does not seem to exist!'.format(d=cfg.basedir))
+		raise
 
-print('Recreating the {subdir}/ tree'.format(subdir=subdir))
-subprocess.check_call(['rm', '-rf', '--', subdir])
-os.mkdir(subdir)
-os.chdir(subdir)
-for comp in ('layers', 'interfaces', 'charms'):
-	os.mkdir(comp)
-os.chdir('charms')
+	print('Recreating the {subdir}/ tree'.format(subdir=subdir))
+	subprocess.check_call(['rm', '-rf', '--', subdir])
+	os.mkdir(subdir)
+	os.chdir(subdir)
+	for comp in ('layers', 'interfaces', 'charms'):
+		os.mkdir(comp)
+	os.chdir('charms')
 
-checkout_charm_recursive('charm-storpool-block')
-checkout_charm_recursive('charm-cinder-storpool')
-checkout_charm_recursive('charm-storpool-inventory')
+	checkout_charm_recursive('charm-storpool-block')
+	checkout_charm_recursive('charm-cinder-storpool')
+	checkout_charm_recursive('charm-storpool-inventory')
 
-print('All done!')
-print('')
+	print('All done!')
+	print('')
 
-print('###################################################')
-print('')
-print('#!/bin/sh')
-print('')
-print('set -e')
-print('')
+	print('###################################################')
+	print('')
+	print('#!/bin/sh')
+	print('')
+	print('set -e')
+	print('')
 
-os.chdir('../layers')
-print("export LAYER_PATH='{path}'".format(path=os.getcwd()))
-os.chdir('../interfaces')
-print("export INTERFACE_PATH='{path}'".format(path=os.getcwd()))
-print('')
+	os.chdir('../layers')
+	print("export LAYER_PATH='{path}'".format(path=os.getcwd()))
+	os.chdir('../interfaces')
+	print("export INTERFACE_PATH='{path}'".format(path=os.getcwd()))
+	print('')
 
-os.chdir('../charms/charm-storpool-block')
-print("cd -- '{path}'".format(path=os.getcwd()))
-print('make && make deploy')
-print('')
+	os.chdir('../charms/charm-storpool-block')
+	print("cd -- '{path}'".format(path=os.getcwd()))
+	print('make && make deploy')
+	print('')
 
-os.chdir('../charm-cinder-storpool')
-print("cd -- '{path}'".format(path=os.getcwd()))
-print('make && make deploy')
-print('')
+	os.chdir('../charm-cinder-storpool')
+	print("cd -- '{path}'".format(path=os.getcwd()))
+	print('make && make deploy')
+	print('')
 
-os.chdir('../charm-storpool-inventory')
-print("cd -- '{path}'".format(path=os.getcwd()))
-print('make && make deploy')
-print('')
+	os.chdir('../charm-storpool-inventory')
+	print("cd -- '{path}'".format(path=os.getcwd()))
+	print('make && make deploy')
+	print('')
+
+
+# FIXME: more commands, options parsing
+parser = argparse.ArgumentParser(
+	prog='storpool-charms',
+	usage='''
+	storpool-charms [-d basedir] checkout
+
+A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
+)
+parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
+parser.add_argument('command', choices=['checkout'])
+
+args = parser.parse_args()
+cfg = Config(basedir = args.basedir)
+
+commands = {
+	'checkout': cmd_checkout,
+}
+commands[args.command](cfg)
