@@ -346,6 +346,26 @@ def cmd_deploy(cfg):
 	sp_msg('')
 
 
+def cmd_undeploy(cfg):
+	short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+
+	sp_msg('Obtaining the current Juju status')
+	status_j = subprocess.check_output(['juju', 'status', '--format=json'])
+	status = json.loads(status_j.decode())
+	found = list(filter(lambda name: name in status['applications'], short_names))
+	if not found:
+		exit('No StorPool charms are installed')
+	else:
+		sp_msg('About to remove {count} StorPool charms'.format(count=len(found)))
+
+	for name in found:
+		sp_msg('Removing the {name} Juju application'.format(name=name))
+		sp_run(cfg, ['juju', 'remove-application', '--', name])
+
+	sp_msg('Removed {count} StorPool charms'.format(count=len(found)))
+	sp_msg('')
+
+
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
@@ -353,12 +373,13 @@ parser = argparse.ArgumentParser(
 	storpool-charms [-N] [-d basedir] pull
 	storpool-charms [-N] [-d basedir] build
 	storpool-charms [-N] [-d basedir] deploy
+	storpool-charms [-N] [-d basedir] undeploy
 
 A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
-parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'pull'])
+parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'pull', 'undeploy'])
 
 args = parser.parse_args()
 cfg = Config(basedir = args.basedir, noop = args.noop)
@@ -368,5 +389,6 @@ commands = {
 	'deploy': cmd_deploy,
 	'checkout': cmd_checkout,
 	'pull': cmd_pull,
+	'undeploy': cmd_undeploy,
 }
 commands[args.command](cfg)
