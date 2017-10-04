@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import argparse
+import json
 import os
 import re
 import requests
@@ -220,6 +221,10 @@ def charm_build_dir(basedir, name):
 	return '{base}/built/{series}/{name}'.format(base=basedir, series=charm_series, name=name)
 
 
+def charm_deploy_dir(basedir, name):
+	return '{build}/{series}/{name}'.format(build=charm_build_dir(basedir, name), series=charm_series, name=name)
+
+
 def cmd_build(cfg):
 	subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
 	sp_msg('Building the charms in the {d} directory'.format(d=subdir_full))
@@ -249,6 +254,94 @@ def cmd_build(cfg):
 		sp_chdir(cfg, '../')
 
 	sp_recurse(cfg, process_charm=process_charm, process_element=None)
+	sp_msg('The StorPool charms were deployed from {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
+	sp_msg('')
+
+
+def find_charm(apps, names):
+	charms_list = list(filter(lambda e: e[1]['charm-name'] in names, six.iteritems(apps)))
+	if len(charms_list) == 0:
+		exit('Could not find a {names} charm deployed under any name'.format(names=' or '.join(names)))
+	elif len(charms_list) > 1:
+		exit('More than one {first_name} application is not supported'.format(first_name=names[0]))
+	return charms_list[0][0]
+
+
+def cmd_deploy(cfg):
+	subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
+	sp_msg('Deplying the charms from the {d} directory'.format(d=subdir_full))
+	try:
+		sp_chdir(cfg, subdir_full, do_chdir=True)
+	except Exception as e:
+		if is_file_not_found(e):
+			exit('The {d} directory does not seem to exist!'.format(d=subdir_full))
+		raise
+	basedir = os.getcwd()
+
+	short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+
+	sp_msg('Obtaining the current Juju status')
+	status_j = subprocess.check_output(['juju', 'status', '--format=json'])
+	status = json.loads(status_j.decode())
+	found = list(filter(lambda name: name in status['applications'], short_names))
+	if found:
+		exit('Found some StorPool charms already installed: {found}'.format(found=', '.join(found)))
+
+	compute_charm = find_charm(status['applications'], ('nova-compute', 'nova-compute-kvm'))
+	nova_machines = sorted(map(lambda e: e['machine'], six.itervalues(status['applications'][compute_charm]['units'])))
+	bad_nova_machines = list(filter(lambda s: '/' in s, nova_machines))
+	if bad_nova_machines:
+		exit('Nova deployed in a container or VM ({machines}) is not supported'.format(machines=','.join(bad_nova_machines)))
+	nova_targets = set(nova_machines)
+
+	storage_charm = find_charm(status['applications'], ('cinder'))
+	cinder_machines = sorted(map(lambda e: e['machine'], six.itervalues(status['applications'][storage_charm]['units'])))
+	cinder_lxd = []
+	cinder_bare = []
+	for machine in cinder_machines:
+		if '/lxd/' not in machine:
+			cinder_bare.append(machine)
+		else:
+			cinder_lxd.append(machine)
+	if cinder_bare:
+		if cinder_lxd:
+			exit('Cinder deployed both in containers ({lxd}) and on bare metal ({bare}) is not supported'.format(bare=', '.join(cinder_bare), lxd=', '.join(cinder_lxd)))
+		else:
+			cinder_targets = set(cinder_bare)
+	else:
+		if not cinder_lxd:
+			exit('Could not find the "{cinder}" charm deployed on any Juju nodes'.format(cinder=storage_charm))
+		cinder_targets = set(map(lambda s: s.split('/', 1)[0], cinder_lxd))
+	
+	if nova_targets.intersection(cinder_targets):
+		exit('Cinder and Nova deployed on the same machines ({same}) is not supported'.format(same=', '.join(sorted(nova_targets.intersection(cinder_targets)))))
+
+	sp_msg('Deploying the storpool-block charm')
+	sp_run(cfg, ['juju', 'deploy', '--', charm_deploy_dir(basedir, 'storpool-block')])
+
+	sp_msg('Linking the storpool-block charm with the {nova} charm'.format(nova=compute_charm))
+	sp_run(cfg, ['juju', 'add-relation', '{nova}:juju-info'.format(nova=compute_charm), 'storpool-block:juju-info'])
+
+	if cinder_lxd:
+		cinder_machines = sorted(cinder_targets)
+		sp_msg('Deploying the storpool-inventory charm to {machines}'.format(machines=', '.join(cinder_machines)))
+		sp_run(cfg, ['juju', 'deploy', '-n', len(cinder_machines), '--to', ','.join(cinder_machines), '--', charm_deploy_dir(basedir, 'storpool-inventory')])
+
+		sp_msg('Linking the storpool-inventory charm with the storpool-block charm')
+		sp_run(cfg, ['juju', 'add-relation', 'storpool-inventory:juju-info', 'storpool-block:juju-info'])
+	else:
+		sp_msg('Linking the storpool-block charm with the {cinder} charm'.format(cinder=storage_charm))
+		sp_run(cfg, ['juju', 'add-relation', '{cinder}:juju-info'.format(cinder=storage_charm), 'storpool-block:juju-info'])
+
+	sp_msg('Deploying the cinder-storpool charm')
+	sp_run(cfg, ['juju', 'deploy', '--', charm_deploy_dir(basedir, 'cinder-storpool')])
+
+	sp_msg('Linking the cinder-storpool charm with the {cinder} charm'.format(cinder=storage_charm))
+	sp_run(cfg, ['juju', 'add-relation', '{cinder}:storage-backend'.format(cinder=storage_charm), 'cinder-storpool:storage-backend'])
+
+	sp_msg('Linking the cinder-storpool charm with the storpool-block charm')
+	sp_run(cfg, ['juju', 'add-relation', 'storpool-block:storpool-presence', 'cinder-storpool:storpool-presence'])
+		
 	sp_msg('The StorPool charms were built in {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
 	sp_msg('')
 
@@ -256,21 +349,23 @@ def cmd_build(cfg):
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
-	storpool-charms [-N] [-d basedir] build
 	storpool-charms [-N] [-d basedir] checkout
 	storpool-charms [-N] [-d basedir] pull
+	storpool-charms [-N] [-d basedir] build
+	storpool-charms [-N] [-d basedir] deploy
 
 A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
-parser.add_argument('command', choices=['build', 'checkout', 'pull'])
+parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'pull'])
 
 args = parser.parse_args()
 cfg = Config(basedir = args.basedir, noop = args.noop)
 
 commands = {
 	'build': cmd_build,
+	'deploy': cmd_deploy,
 	'checkout': cmd_checkout,
 	'pull': cmd_pull,
 }
