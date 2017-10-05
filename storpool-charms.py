@@ -337,7 +337,7 @@ def cmd_deploy(cfg):
 	if cinder_lxd:
 		cinder_machines = sorted(cinder_targets)
 		sp_msg('Deploying the storpool-inventory charm to {machines}'.format(machines=', '.join(cinder_machines)))
-		sp_run(cfg, ['juju', 'deploy', '-n', len(cinder_machines), '--to', ','.join(cinder_machines), '--', charm_deploy_dir(basedir, 'storpool-inventory')])
+		sp_run(cfg, ['juju', 'deploy', '-n', str(len(cinder_machines)), '--to', ','.join(cinder_machines), '--', charm_deploy_dir(basedir, 'storpool-inventory')])
 
 		sp_msg('Linking the storpool-inventory charm with the storpool-block charm')
 		sp_run(cfg, ['juju', 'add-relation', 'storpool-inventory:juju-info', 'storpool-block:juju-info'])
