@@ -12,7 +12,7 @@ import yaml
 import six
 import sys
 
-base_url='https://github.com/storpool'
+baseurl='https://github.com/storpool'
 subdir='storpool-charms'
 charm_names=['charm-storpool-block', 'charm-cinder-storpool', 'charm-storpool-inventory']
 charm_series='xenial'
@@ -20,8 +20,9 @@ re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-
 
 
 class Config(object):
-	def __init__(self, basedir, noop):
+	def __init__(self, basedir, baseurl, noop):
 		self.basedir = basedir
+		self.baseurl = baseurl
 		self.noop = noop
 
 
@@ -69,15 +70,26 @@ def sp_run(cfg, command):
 
 	subprocess.check_call(command)
 
-def checkout_repository(cfg, name):
-	url = '{base}/{name}.git'.format(base=base_url, name=name)
-	try:
+def check_repository(cfg, url):
+	comp = requests.utils.urlparse(url)
+	if comp.scheme in ('http', 'https'):
 		if cfg.noop:
 			sp_msg('(would send an HTTP request to {url})'.format(url=url))
-		elif not requests.request('GET', url).ok:
-			exit('The {name} StorPool repository does not seem to exist on GitHub!'.format(name=name))
+		else:
+			return requests.request('GET', url).ok
+	elif comp.scheme in ('', 'file'):
+		return os.path.isdir(comp.path)
+	else:
+		# Leave it for the actual "git clone" to figure out whether this exists.
+		return True
+
+def checkout_repository(cfg, name):
+	url = '{base}/{name}.git'.format(base=cfg.baseurl, name=name)
+	try:
+		if not check_repository(cfg, url):
+			exit('The {name} StorPool repository does not seem to exist at {url}'.format(name=name, url=url))
 	except Exception as e:
-		exit('Could not check for the existence of the {name} StorPool repository on GitHub: {e}'.format(name=name, e=e))
+		exit('Could not check for the existence of the {name} StorPool repository at {url}: {e}'.format(name=name, url=url, e=e))
 	sp_msg('Checking out {url}'.format(url=url))
 	try:
 		sp_run(cfg, ['git', 'clone', '--', url]);
@@ -379,10 +391,11 @@ A {subdir} directory will be created in the specified base directory.'''.format(
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
+parser.add_argument('-U', '--baseurl', default=baseurl, help='specify the base URL for the StorPool Git repositories')
 parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'pull', 'undeploy'])
 
 args = parser.parse_args()
-cfg = Config(basedir = args.basedir, noop = args.noop)
+cfg = Config(basedir = args.basedir, baseurl = args.baseurl, noop = args.noop)
 
 commands = {
 	'build': cmd_build,
