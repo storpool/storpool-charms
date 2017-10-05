@@ -20,9 +20,10 @@ re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-
 
 
 class Config(object):
-	def __init__(self, basedir, baseurl, noop):
+	def __init__(self, basedir, baseurl, suffix, noop):
 		self.basedir = basedir
 		self.baseurl = baseurl
+		self.suffix = suffix
 		self.noop = noop
 
 
@@ -378,6 +379,41 @@ def cmd_undeploy(cfg):
 	sp_msg('')
 
 
+def cmd_dist(cfg):
+	if cfg.suffix is None or cfg.suffix == '':
+		exit('No distribution suffix (-s) specified')
+	dist_name = 'storpool-charms-{series}-{suffix}'.format(series=charm_series, suffix=cfg.suffix)
+	dist_path = '{base}/{name}'.format(base=cfg.basedir, name=dist_name)
+	dist_tar_temp = '{name}.tar'.format(name=dist_name)
+	dist_tarball = '{tar}.xz'.format(tar=dist_tar_temp)
+	sp_msg('Creating {tarball} in {base}'.format(tarball=dist_tarball, base=cfg.basedir))
+
+	sp_msg('Copying the charms tree {base}/{subdir}'.format(base=cfg.basedir, subdir=subdir))
+	sp_run(cfg, ['rm', '-rf', '--', dist_path])
+	sp_mkdir(cfg, dist_path)
+	sp_run(cfg, [
+		'cp', '-Rp', '--',
+		'{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir),
+		'{dist}/{subdir}'.format(dist=dist_path, subdir=subdir),
+	])
+
+	sp_msg('Copying the storpool-charms helper tools')
+	for fname in subprocess.check_output(['git', 'ls-files']).decode().split('\n'):
+		if fname == '':
+			continue
+		sp_run(cfg, ['cp', '-p', '--', fname, '{dist}/{fname}'.format(dist=dist_path, fname=fname)])
+
+	sp_msg('Creating the tarball')
+	sp_chdir(cfg, cfg.basedir)
+	sp_run(cfg, ['rm', '-f', '--', dist_tar_temp, dist_tarball])
+	sp_run(cfg, ['tar', 'cf', dist_tar_temp, dist_name])
+	sp_run(cfg, ['xz', '-9', '--', dist_tar_temp])
+	sp_run(cfg, ['rm', '-rf', '--', dist_tar_temp, dist_name])
+
+	sp_msg('{tarball} was created in {base}'.format(tarball=dist_tarball, base=cfg.basedir))
+	sp_msg('')
+
+
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
@@ -391,15 +427,22 @@ A {subdir} directory will be created in the specified base directory.'''.format(
 )
 parser.add_argument('-d', '--basedir', default='.', help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true', help='no-operation mode, display what would be done')
+parser.add_argument('-s', '--suffix', help='specify the suffix for the distribution name')
 parser.add_argument('-U', '--baseurl', default=baseurl, help='specify the base URL for the StorPool Git repositories')
-parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'pull', 'undeploy'])
+parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'dist', 'pull', 'undeploy'])
 
 args = parser.parse_args()
-cfg = Config(basedir = args.basedir, baseurl = args.baseurl, noop = args.noop)
+cfg = Config(
+	basedir = args.basedir,
+	baseurl = args.baseurl,
+	suffix = args.suffix,
+	noop = args.noop,
+)
 
 commands = {
 	'build': cmd_build,
 	'deploy': cmd_deploy,
+	'dist': cmd_dist,
 	'checkout': cmd_checkout,
 	'pull': cmd_pull,
 	'undeploy': cmd_undeploy,
