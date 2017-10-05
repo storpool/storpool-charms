@@ -4,7 +4,7 @@ set -e
 
 spcharms='./storpool-charms.py'
 testdir='../test'
-url="${SP_CHARMS_REPO+-U $SP_CHARMS_REPO}"
+common="${SP_CHARMS_REPO+-U $SP_CHARMS_REPO} -d $testdir"
 
 do_test() {
 	local python="$1"
@@ -23,13 +23,13 @@ do_test() {
 
 for python in python2 python3; do
 	rm -rf -- "$testdir"
-	do_test "$python" "$url -d $testdir --help"
+	do_test "$python" "$common --help"
 	if [ -e "$testdir" ]; then
 		printf '"%s --help" created %s\n' "$python" "$testdir" 1>&2
 		exit 1
 	fi
 
-	do_test "$python" "$url -d $testdir -N checkout"
+	do_test "$python" "$common -N checkout"
 	if [ -e "$testdir" ]; then
 		printf '"%s -N" created %s\n' "$python" "$testdir" 1>&2
 		exit 1
@@ -39,17 +39,17 @@ done
 for python in python2 python3; do
 	rm -rf -- "$testdir"
 	mkdir -- "$testdir"
-	do_test "$python" "$url -d $testdir checkout"
+	do_test "$python" "$common checkout"
 	if [ ! -d "$testdir/storpool-charms/charms/charm-storpool-block" ] || [ ! -d "$testdir/storpool-charms/interfaces/interface-storpool-service" ]; then
 		printf '"%s checkout" did not create the expected directories\n' "$python" 1>&2
 		exit 1
 	fi
 
-	do_test "$python" "$url -d $testdir -N pull"
-	do_test "$python" "$url -d $testdir pull"
+	do_test "$python" "$common -N pull"
+	do_test "$python" "$common pull"
 
-	do_test "$python" "$url -d $testdir -N build"
-	do_test "$python" "$url -d $testdir build"
+	do_test "$python" "$common -N build"
+	do_test "$python" "$common build"
 
-	do_test "$python" "$url -d $testdir -N deploy"
+	do_test "$python" "$common -N deploy"
 done
