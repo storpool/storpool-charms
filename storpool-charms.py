@@ -382,18 +382,19 @@ def cmd_undeploy(cfg):
 def cmd_dist(cfg):
 	if cfg.suffix is None or cfg.suffix == '':
 		exit('No distribution suffix (-s) specified')
+	basedir = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
 	dist_name = 'storpool-charms-{series}-{suffix}'.format(series=charm_series, suffix=cfg.suffix)
 	dist_path = '{base}/{name}'.format(base=cfg.basedir, name=dist_name)
 	dist_tar_temp = '{name}.tar'.format(name=dist_name)
 	dist_tarball = '{tar}.xz'.format(tar=dist_tar_temp)
-	sp_msg('Creating {tarball} in {base}'.format(tarball=dist_tarball, base=cfg.basedir))
+	sp_msg('Creating {tarball} in {basedir}'.format(tarball=dist_tarball, basedir=cfg.basedir))
 
-	sp_msg('Copying the charms tree {base}/{subdir}'.format(base=cfg.basedir, subdir=subdir))
+	sp_msg('Copying the charms tree {base}'.format(base=basedir))
 	sp_run(cfg, ['rm', '-rf', '--', dist_path])
 	sp_mkdir(cfg, dist_path)
 	sp_run(cfg, [
 		'cp', '-Rp', '--',
-		'{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir),
+		basedir,
 		'{dist}/{subdir}'.format(dist=dist_path, subdir=subdir),
 	])
 
@@ -403,14 +404,45 @@ def cmd_dist(cfg):
 			continue
 		sp_run(cfg, ['cp', '-p', '--', fname, '{dist}/{fname}'.format(dist=dist_path, fname=fname)])
 
+	sp_chdir(cfg, '{dist}/{subdir}'.format(dist=dist_path, subdir=subdir))
+	if cfg.noop:
+		sp_msg('(would gather the charm versions)')
+	else:
+		sp_msg('Gathering the charm versions')
+		charm_subdirs = []
+		versions = {}
+		for root, dirs, _ in os.walk('.'):
+			comp = root.split('/')
+			if len(comp) == 1:
+				for extra in filter(lambda s: s not in ('charms', 'layers', 'interfaces'), dirs):
+					dirs.remove(extra)
+			elif len(comp) == 3:
+				(c_type, c_name) = comp[-2:]
+				if c_name.startswith(c_type[:-1]):
+					path = '/'.join([c_type, c_name])
+					charm_subdirs.append(path)
+				# Right, Python 2 doesn't have clear(), either.
+				while dirs:
+					dirs.pop()
+
+		for path in charm_subdirs:
+			sp_chdir(cfg, path)
+			name = path.split('/')[-1]
+			vers = subprocess.check_output(['git', 'describe']).decode().split('\n', 1)[0]
+			versions[name] = vers
+			sp_chdir(cfg, '../..')
+
+		with open('versions.txt', mode='w') as f:
+			f.writelines(map(lambda e: '{name}\t{vers}\n'.format(name=e[0], vers=e[1]), sorted(six.iteritems(versions))))
+
 	sp_msg('Creating the tarball')
-	sp_chdir(cfg, cfg.basedir)
+	sp_chdir(cfg, '../..')
 	sp_run(cfg, ['rm', '-f', '--', dist_tar_temp, dist_tarball])
 	sp_run(cfg, ['tar', 'cf', dist_tar_temp, dist_name])
 	sp_run(cfg, ['xz', '-9', '--', dist_tar_temp])
 	sp_run(cfg, ['rm', '-rf', '--', dist_tar_temp, dist_name])
 
-	sp_msg('{tarball} was created in {base}'.format(tarball=dist_tarball, base=cfg.basedir))
+	sp_msg('Created {base}/{tarball}'.format(tarball=dist_tarball, base=cfg.basedir))
 	sp_msg('')
 
 
