@@ -404,13 +404,15 @@ def cmd_dist(cfg):
 			continue
 		sp_run(cfg, ['cp', '-p', '--', fname, '{dist}/{fname}'.format(dist=dist_path, fname=fname)])
 
+	vers = subprocess.check_output(['git', 'describe']).decode().split('\n', 1)[0]
+	versions = {'storpool-charms': vers}
+
 	sp_chdir(cfg, '{dist}/{subdir}'.format(dist=dist_path, subdir=subdir))
 	if cfg.noop:
 		sp_msg('(would gather the charm versions)')
 	else:
 		sp_msg('Gathering the charm versions')
 		charm_subdirs = []
-		versions = {}
 		for root, dirs, _ in os.walk('.'):
 			comp = root.split('/')
 			if len(comp) == 1:
