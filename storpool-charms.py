@@ -449,11 +449,13 @@ def cmd_dist(cfg):
 parser = argparse.ArgumentParser(
 	prog='storpool-charms',
 	usage='''
+	storpool-charms [-N] [-d basedir] deploy
+	storpool-charms [-N] [-d basedir] undeploy
+
 	storpool-charms [-N] [-d basedir] checkout
 	storpool-charms [-N] [-d basedir] pull
 	storpool-charms [-N] [-d basedir] build
-	storpool-charms [-N] [-d basedir] deploy
-	storpool-charms [-N] [-d basedir] undeploy
+	storpool-charms [-N] [-d basedir] dist
 
 A {subdir} directory will be created in the specified base directory.'''.format(subdir=subdir),
 )
