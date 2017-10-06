@@ -355,7 +355,7 @@ def cmd_deploy(cfg):
 	sp_msg('Linking the cinder-storpool charm with the storpool-block charm')
 	sp_run(cfg, ['juju', 'add-relation', 'storpool-block:storpool-presence', 'cinder-storpool:storpool-presence'])
 		
-	sp_msg('The StorPool charms were built in {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
+	sp_msg('The StorPool charms were deployed from {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
 	sp_msg('')
 
 
