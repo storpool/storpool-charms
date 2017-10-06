@@ -37,30 +37,31 @@ To get the latest version of the StorPool charms, follow this procedure.
 
 1. Check out the `storpool-charms` tool from its GitHub repository:
 
-    git clone https://github.com/storpool/storpool-charms.git
-    cd storpool-charms
+    `git clone https://github.com/storpool/storpool-charms.git`
+
+    `cd storpool-charms`
 
 2. Check out the current version of the charms:
 
-    ./storpool-charms.py checkout
+    `./storpool-charms.py checkout`
 
 3. Build the charms (make sure the `charm-tools` Ubuntu package is installed):
 
-    ./storpool-charms.py build
+    `./storpool-charms.py build`
 
 4. Deploy the newly-built charms:
 
-    ./storpool-charms.py deploy
+    `./storpool-charms.py deploy`
 
 5. At a later point, fetch the latest StorPool updates from the GitHub repositories:
 
-    ./storpool-charms.py pull && ./storpool-charms.py build
+    `./storpool-charms.py pull && ./storpool-charms.py build`
 
 
 Contact us
 ----------
 
-Please feel free to [contact StorPool][contact] for any additional information or
+Please feel free to [contact StorPool][support] for any additional information or
 for assistance with any problems.
 
 
