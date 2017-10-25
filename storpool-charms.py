@@ -311,7 +311,7 @@ def cmd_build(cfg):
         sp_chdir(cfg, '../')
 
     sp_recurse(cfg, process_charm=process_charm, process_element=None)
-    sp_msg('The StorPool charms were deployed from {basedir}/{subdir}'
+    sp_msg('The StorPool charms were built in {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
     sp_msg('')
 
