@@ -122,7 +122,7 @@ def is_file_not_found(e):
             e.errno == os.errno.ENOENT
 
 
-def parse_layers(cfg, to_process, layers_required):
+def parse_layers(cfg, name, to_process, layers_required):
     if cfg.noop:
         sp_msg('(would examine the "layer.yaml" file and '
                'process layers and interfaces recursively)')
@@ -168,7 +168,7 @@ def checkout_element(cfg, name, to_process, layers_required=False):
     sp_run(cfg, ['flake8', '.'])
     sp_msg('- running pep8')
     sp_run(cfg, ['pep8', '.'])
-    parse_layers(cfg, to_process, layers_required)
+    parse_layers(cfg, name, to_process, layers_required)
     sp_chdir(cfg, '../../charms')
 
 
@@ -246,7 +246,7 @@ def cmd_pull(cfg):
                .format(name=elem.name, type=elem.type))
         sp_chdir(cfg, elem.fname)
         sp_run(cfg, ['git', 'pull', '--ff-only'])
-        parse_layers(cfg, to_process, False)
+        parse_layers(cfg, elem.name, to_process, False)
         sp_chdir(cfg, '../')
 
     def process_charm(name, to_process):
