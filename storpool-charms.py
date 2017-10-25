@@ -38,6 +38,7 @@ class Element(object):
 def sp_msg(s):
     print(s)
 
+
 def sp_chdir(cfg, dirname, do_chdir=False):
     if cfg.noop:
         sp_msg("# chdir -- '{dirname}'".format(dirname=dirname))
@@ -46,12 +47,14 @@ def sp_chdir(cfg, dirname, do_chdir=False):
 
     os.chdir(dirname)
 
+
 def sp_mkdir(cfg, dirname):
     if cfg.noop:
         sp_msg("# mkdir -- '{dirname}'".format(dirname=dirname))
         return
 
     os.mkdir(dirname)
+
 
 def sp_makedirs(cfg, dirname, mode=0o777, exist_ok=False):
     if cfg.noop:
@@ -63,12 +66,14 @@ def sp_makedirs(cfg, dirname, mode=0o777, exist_ok=False):
         return
     os.makedirs(dirname, mode=mode)
 
+
 def sp_run(cfg, command):
     if cfg.noop:
         sp_msg("# {command}".format(command=' '.join(command)))
         return
 
     subprocess.check_call(command)
+
 
 def check_repository(cfg, url):
     comp = requests.utils.urlparse(url)
@@ -82,6 +87,7 @@ def check_repository(cfg, url):
     else:
         # Leave it for the actual "git clone" to figure out whether this exists.
         return True
+
 
 def checkout_repository(cfg, name):
     url = '{base}/{name}.git'.format(base=cfg.baseurl, name=name)
@@ -147,6 +153,7 @@ def checkout_element(cfg, name, to_process, layers_required=False):
     sp_run(cfg, ['pep8', '.'])
     parse_layers(cfg, to_process, layers_required)
     sp_chdir(cfg, '../../charms')
+
 
 def sp_recurse(cfg, process_charm, process_element):
     sp_chdir(cfg, 'charms')
