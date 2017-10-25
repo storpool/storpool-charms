@@ -142,6 +142,10 @@ def parse_layers(cfg, to_process, layers_required):
 def checkout_element(cfg, name, to_process, layers_required=False):
 	checkout_repository(cfg, name)
 	sp_chdir(cfg, name)
+	sp_msg('- running flake8')
+	sp_run(cfg, ['flake8', '.'])
+	sp_msg('- running pep8')
+	sp_run(cfg, ['pep8', '.'])
 	parse_layers(cfg, to_process, layers_required)
 	sp_chdir(cfg, '../../charms')
 
