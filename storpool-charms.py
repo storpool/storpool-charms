@@ -497,6 +497,46 @@ def cmd_undeploy(cfg):
     sp_msg('')
 
 
+def cmd_upgrade(cfg):
+    subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
+    sp_msg('Deplying the charms from the {d} directory'.format(d=subdir_full))
+    try:
+        sp_chdir(cfg, subdir_full, do_chdir=True)
+    except Exception as e:
+        if is_file_not_found(e):
+            exit('The {d} directory does not seem to exist!'
+                 .format(d=subdir_full))
+        raise
+    basedir = os.getcwd()
+
+    short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+
+    sp_msg('Obtaining the current Juju status')
+    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
+    status = json.loads(status_j.decode())
+    found = list(filter(lambda name: name in status['applications'],
+                        short_names))
+    if not found:
+        exit('No StorPool charms are installed')
+    else:
+        sp_msg('About to upgrade {count} StorPool charms'
+               .format(count=len(found)))
+
+    for name in found:
+        sp_msg('Upgrading the {name} Juju application'.format(name=name))
+        sp_run(cfg, [
+                     'juju',
+                     'upgrade-charm',
+                     '--path',
+                     charm_deploy_dir(basedir, name),
+                     '--',
+                     name
+                    ])
+
+    sp_msg('Upgraded {count} StorPool charms'.format(count=len(found)))
+    sp_msg('')
+
+
 def cmd_dist(cfg):
     if cfg.suffix is None or cfg.suffix == '':
         exit('No distribution suffix (-s) specified')
@@ -591,6 +631,7 @@ commands = {
     'checkout': cmd_checkout,
     'pull': cmd_pull,
     'undeploy': cmd_undeploy,
+    'upgrade': cmd_upgrade,
 }
 
 
@@ -598,6 +639,7 @@ parser = argparse.ArgumentParser(
     prog='storpool-charms',
     usage='''
     storpool-charms [-N] [-d basedir] deploy
+    storpool-charms [-N] [-d basedir] upgrade
     storpool-charms [-N] [-d basedir] undeploy
 
     storpool-charms [-N] [-d basedir] checkout
