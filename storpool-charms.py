@@ -10,7 +10,6 @@ import requests
 import subprocess
 import yaml
 import six
-import sys
 
 baseurl='https://github.com/storpool'
 subdir='storpool-charms'
