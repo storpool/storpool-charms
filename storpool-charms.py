@@ -137,7 +137,8 @@ def parse_layers(cfg, name, to_process, layers_required):
         exit('Could not load the layer.yaml file from {name}: {e}'
              .format(name=name, e=e))
 
-    for elem in filter(lambda e: e.find('storpool') != -1,
+    for elem in filter(lambda e: e.find('storpool') != -1 or
+                       e == 'interface:cinder-backend',
                        contents['includes']):
         m = re_elem.match(elem)
         if m is None:
