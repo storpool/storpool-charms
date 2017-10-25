@@ -11,10 +11,10 @@ import subprocess
 import yaml
 import six
 
-baseurl='https://github.com/storpool'
-subdir='storpool-charms'
-charm_names=['charm-storpool-block', 'charm-cinder-storpool', 'charm-storpool-inventory']
-charm_series='xenial'
+baseurl = 'https://github.com/storpool'
+subdir = 'storpool-charms'
+charm_names = ['charm-storpool-block', 'charm-cinder-storpool', 'charm-storpool-inventory']
+charm_series = 'xenial'
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : (?P<name> [a-z][a-z-]* ) $', re.X)
 
 
@@ -98,7 +98,7 @@ def checkout_repository(cfg, name):
         exit('Could not check for the existence of the {name} StorPool repository at {url}: {e}'.format(name=name, url=url, e=e))
     sp_msg('Checking out {url}'.format(url=url))
     try:
-        sp_run(cfg, ['git', 'clone', '--', url]);
+        sp_run(cfg, ['git', 'clone', '--', url])
     except Exception:
         exit('Could not check out the {name} module'.format(name=name))
 
@@ -194,7 +194,7 @@ def cmd_checkout(cfg):
     sp_chdir(cfg, subdir)
     for comp in ('layers', 'interfaces', 'charms'):
         sp_mkdir(cfg, comp)
-    
+
     def process_charm(name, to_process):
         sp_msg('Checking out the {name} charm'.format(name=name))
         checkout_element(cfg, name, to_process, layers_required=True)
@@ -335,7 +335,7 @@ def cmd_deploy(cfg):
         if not cinder_lxd:
             exit('Could not find the "{cinder}" charm deployed on any Juju nodes'.format(cinder=storage_charm))
         cinder_targets = set(map(lambda s: s.split('/', 1)[0], cinder_lxd))
-    
+
     if nova_targets.intersection(cinder_targets):
         exit('Cinder and Nova deployed on the same machines ({same}) is not supported'.format(same=', '.join(sorted(nova_targets.intersection(cinder_targets)))))
 
@@ -364,7 +364,7 @@ def cmd_deploy(cfg):
 
     sp_msg('Linking the cinder-storpool charm with the storpool-block charm')
     sp_run(cfg, ['juju', 'add-relation', 'storpool-block:storpool-presence', 'cinder-storpool:storpool-presence'])
-        
+
     sp_msg('The StorPool charms were deployed from {basedir}/{subdir}'.format(basedir=cfg.basedir, subdir=subdir))
     sp_msg('')
 
@@ -479,10 +479,10 @@ parser.add_argument('command', choices=['build', 'checkout', 'deploy', 'dist', '
 
 args = parser.parse_args()
 cfg = Config(
-    basedir = args.basedir,
-    baseurl = args.baseurl,
-    suffix = args.suffix,
-    noop = args.noop,
+    basedir=args.basedir,
+    baseurl=args.baseurl,
+    suffix=args.suffix,
+    noop=args.noop,
 )
 
 commands = {
