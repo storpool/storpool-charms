@@ -14,8 +14,8 @@ import six
 baseurl = 'https://github.com/storpool'
 subdir = 'storpool-charms'
 charm_names = [
-               'charm-storpool-block',
                'charm-cinder-storpool',
+               'charm-storpool-block',
                'charm-storpool-inventory'
               ]
 charm_series = 'xenial'
