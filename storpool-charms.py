@@ -396,6 +396,23 @@ def cmd_deploy(cfg):
                      .join(sorted(nova_targets
                                   .intersection(cinder_targets)))))
 
+    all_machines = sorted(set(cinder_bare +
+                              cinder_lxd +
+                              list(cinder_targets) +
+                              list(nova_targets)))
+    sp_msg('Deploying the storpool-inventory charm everywhere ({all})'
+           .format(all=', '.join(all_machines)))
+    sp_run(cfg, [
+                 'juju',
+                 'deploy',
+                 '-n',
+                 str(len(all_machines)),
+                 '--to',
+                 ','.join(all_machines),
+                 '--',
+                 charm_deploy_dir(basedir, 'storpool-inventory'),
+                ])
+
     sp_msg('Deploying the storpool-block charm')
     sp_run(cfg, [
                  'juju',
