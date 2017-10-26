@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import argparse
+import collections
 import json
 import os
 import re
@@ -40,6 +41,22 @@ class Element(object):
         self.parent_dir = parent_dir
         self.fname = fname
         self.exists = exists
+
+
+StackConfig = collections.namedtuple('StackConfig', [
+                                                     'compute_charm',
+                                                     'storage_charm',
+
+                                                     'cinder_bare',
+                                                     'cinder_lxd',
+                                                     'cinder_machines',
+                                                     'cinder_targets',
+
+                                                     'nova_machines',
+                                                     'nova_targets',
+
+                                                     'all_machines',
+                                                    ])
 
 
 def sp_msg(s):
@@ -330,6 +347,77 @@ def find_charm(apps, names):
     return charms_list[0][0]
 
 
+def get_stack_config(cfg, status):
+    """
+    Examine a Juju cluster to find the Cinder and Nova nodes to deploy to.
+    """
+    compute_charm = find_charm(status['applications'],
+                               ('nova-compute', 'nova-compute-kvm'))
+    nova_machines = sorted(map(lambda e: e['machine'],
+                               six.itervalues(status[
+                                   'applications'][compute_charm]['units'])))
+    bad_nova_machines = list(filter(lambda s: '/' in s, nova_machines))
+    if bad_nova_machines:
+        exit('Nova deployed in a container or VM ({machines}) is not supported'
+             .format(machines=','.join(bad_nova_machines)))
+    nova_targets = set(nova_machines)
+
+    storage_charm = find_charm(status['applications'], ('cinder'))
+    cinder_machines = sorted(map(lambda e: e['machine'],
+                                 six.itervalues(status[
+                                     'applications'][
+                                     storage_charm][
+                                     'units'])))
+    cinder_lxd = []
+    cinder_bare = []
+    for machine in cinder_machines:
+        if '/lxd/' not in machine:
+            cinder_bare.append(machine)
+        else:
+            cinder_lxd.append(machine)
+    if cinder_bare:
+        if cinder_lxd:
+            exit('Cinder deployed both in containers ({lxd}) and '
+                 'on bare metal ({bare}) is not supported'
+                 .format(bare=', '.join(cinder_bare),
+                         lxd=', '.join(cinder_lxd)))
+        else:
+            cinder_targets = set(cinder_bare)
+    else:
+        if not cinder_lxd:
+            exit('Could not find the "{cinder}" charm deployed on '
+                 'any Juju nodes'.format(cinder=storage_charm))
+        cinder_targets = set(map(lambda s: s.split('/', 1)[0], cinder_lxd))
+        cinder_machines = sorted(cinder_targets)
+
+    if nova_targets.intersection(cinder_targets):
+        exit('Cinder and Nova deployed on the same machines ({same}) is '
+             'not supported'
+             .format(same=', '
+                     .join(sorted(nova_targets
+                                  .intersection(cinder_targets)))))
+
+    all_machines = sorted(set(cinder_bare +
+                              cinder_lxd +
+                              list(cinder_targets) +
+                              list(nova_targets)))
+
+    return StackConfig(
+                       compute_charm=compute_charm,
+                       storage_charm=storage_charm,
+
+                       cinder_lxd=cinder_lxd,
+                       cinder_bare=cinder_bare,
+                       cinder_machines=cinder_machines,
+                       cinder_targets=cinder_targets,
+
+                       nova_machines=nova_machines,
+                       nova_targets=nova_targets,
+
+                       all_machines=all_machines,
+                      )
+
+
 def cmd_deploy(cfg):
     subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
     sp_msg('Deplying the charms from the {d} directory'.format(d=subdir_full))
@@ -353,62 +441,17 @@ def cmd_deploy(cfg):
         exit('Found some StorPool charms already installed: {found}'
              .format(found=', '.join(found)))
 
-    compute_charm = find_charm(status['applications'],
-                               ('nova-compute', 'nova-compute-kvm'))
-    nova_machines = sorted(map(lambda e: e['machine'],
-                           six.itervalues(status[
-                               'applications'][compute_charm]['units'])))
-    bad_nova_machines = list(filter(lambda s: '/' in s, nova_machines))
-    if bad_nova_machines:
-        exit('Nova deployed in a container or VM ({machines}) is not supported'
-             .format(machines=','.join(bad_nova_machines)))
-    nova_targets = set(nova_machines)
+    st = get_stack_config(cfg, status)
 
-    storage_charm = find_charm(status['applications'], ('cinder'))
-    cinder_machines = sorted(map(lambda e: e['machine'],
-                                 six.itervalues(status[
-                                     'applications'][storage_charm]['units'])))
-    cinder_lxd = []
-    cinder_bare = []
-    for machine in cinder_machines:
-        if '/lxd/' not in machine:
-            cinder_bare.append(machine)
-        else:
-            cinder_lxd.append(machine)
-    if cinder_bare:
-        if cinder_lxd:
-            exit('Cinder deployed both in containers ({lxd}) and '
-                 'on bare metal ({bare}) is not supported'
-                 .format(bare=', '.join(cinder_bare),
-                         lxd=', '.join(cinder_lxd)))
-        else:
-            cinder_targets = set(cinder_bare)
-    else:
-        if not cinder_lxd:
-            exit('Could not find the "{cinder}" charm deployed on '
-                 'any Juju nodes'.format(cinder=storage_charm))
-        cinder_targets = set(map(lambda s: s.split('/', 1)[0], cinder_lxd))
-
-    if nova_targets.intersection(cinder_targets):
-        exit('Cinder and Nova deployed on the same machines ({same}) is '
-             'not supported'
-             .format(same=', '
-                     .join(sorted(nova_targets
-                                  .intersection(cinder_targets)))))
-
-    all_machines = sorted(set(cinder_bare +
-                              cinder_lxd +
-                              list(cinder_targets) +
-                              list(nova_targets)))
     sp_msg('Deploying the storpool-inventory charm everywhere ({all})'
-           .format(all=', '.join(all_machines)))
+           .format(all=', '.join(st.all_machines)))
     sp_run(cfg, [
                  'juju',
                  'deploy',
                  '-n',
-                 str(len(all_machines)),
+                 str(len(st.all_machines)),
                  '--to',
-                 ','.join(all_machines),
+                 ','.join(st.all_machines),
                  '--',
                  charm_deploy_dir(basedir, 'storpool-inventory'),
                 ])
@@ -422,25 +465,24 @@ def cmd_deploy(cfg):
                 ])
 
     sp_msg('Linking the storpool-block charm with the {nova} charm'
-           .format(nova=compute_charm))
+           .format(nova=st.compute_charm))
     sp_run(cfg, [
                  'juju',
                  'add-relation',
-                 '{nova}:juju-info'.format(nova=compute_charm),
+                 '{nova}:juju-info'.format(nova=st.compute_charm),
                  'storpool-block:juju-info'
                 ])
 
-    if cinder_lxd:
-        cinder_machines = sorted(cinder_targets)
+    if st.cinder_lxd:
         sp_msg('Deploying the storpool-candleholder charm to {machines}'
-               .format(machines=', '.join(cinder_machines)))
+               .format(machines=', '.join(st.cinder_machines)))
         sp_run(cfg, [
                      'juju',
                      'deploy',
                      '-n',
-                     str(len(cinder_machines)),
+                     str(len(st.cinder_machines)),
                      '--to',
-                     ','.join(cinder_machines),
+                     ','.join(st.cinder_machines),
                      '--',
                      charm_deploy_dir(basedir, 'storpool-candleholder')
                     ])
@@ -455,11 +497,11 @@ def cmd_deploy(cfg):
                     ])
     else:
         sp_msg('Linking the storpool-block charm with the {cinder} charm'
-               .format(cinder=storage_charm))
+               .format(cinder=st.storage_charm))
         sp_run(cfg, [
                      'juju',
                      'add-relation',
-                     '{cinder}:juju-info'.format(cinder=storage_charm),
+                     '{cinder}:juju-info'.format(cinder=st.storage_charm),
                      'storpool-block:juju-info'
                     ])
 
@@ -472,11 +514,11 @@ def cmd_deploy(cfg):
                 ])
 
     sp_msg('Linking the cinder-storpool charm with the {cinder} charm'
-           .format(cinder=storage_charm))
+           .format(cinder=st.storage_charm))
     sp_run(cfg, [
                  'juju',
                  'add-relation',
-                 '{cinder}:storage-backend'.format(cinder=storage_charm),
+                 '{cinder}:storage-backend'.format(cinder=st.storage_charm),
                  'cinder-storpool:storage-backend'
                 ])
 
