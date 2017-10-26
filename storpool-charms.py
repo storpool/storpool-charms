@@ -16,6 +16,7 @@ subdir = 'storpool-charms'
 charm_names = [
                'charm-cinder-storpool',
                'charm-storpool-block',
+               'charm-storpool-candleholder',
                'charm-storpool-inventory'
               ]
 charm_series = 'xenial'
@@ -414,7 +415,7 @@ def cmd_deploy(cfg):
 
     if cinder_lxd:
         cinder_machines = sorted(cinder_targets)
-        sp_msg('Deploying the storpool-inventory charm to {machines}'
+        sp_msg('Deploying the storpool-candleholder charm to {machines}'
                .format(machines=', '.join(cinder_machines)))
         sp_run(cfg, [
                      'juju',
@@ -424,15 +425,15 @@ def cmd_deploy(cfg):
                      '--to',
                      ','.join(cinder_machines),
                      '--',
-                     charm_deploy_dir(basedir, 'storpool-inventory')
+                     charm_deploy_dir(basedir, 'storpool-candleholder')
                     ])
 
-        sp_msg('Linking the storpool-inventory charm with '
+        sp_msg('Linking the storpool-candleholder charm with '
                'the storpool-block charm')
         sp_run(cfg, [
                      'juju',
                      'add-relation',
-                     'storpool-inventory:juju-info',
+                     'storpool-candleholder:juju-info',
                      'storpool-block:juju-info'
                     ])
     else:
