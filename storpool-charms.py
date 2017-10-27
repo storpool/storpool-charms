@@ -804,6 +804,14 @@ def get_charm_config(stack, conf, bypass):
     return yaml.dump(ch)
 
 
+def cmd_generate_charm_config(cfg):
+    status = get_juju_status()
+    stack = get_stack_config(cfg, status)
+    conf = get_storpool_config(cfg, status=status)
+    charmconf = get_charm_config(stack, conf, [])
+    print(charmconf)
+
+
 def deploy_wait(idx):
     reached = False
     max_itr = 60
@@ -1112,6 +1120,7 @@ commands = {
     'undeploy': cmd_undeploy,
     'upgrade': cmd_upgrade,
     'generate-config': cmd_generate_config,
+    'generate-charm-config': cmd_generate_charm_config,
     'deploy-test': cmd_deploy_test,
 }
 
