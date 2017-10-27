@@ -9,17 +9,60 @@ import os
 import re
 import requests
 import subprocess
+import tempfile
+import time
 import yaml
 import six
 
 baseurl = 'https://github.com/storpool'
 subdir = 'storpool-charms'
-charm_names = [
-               'charm-cinder-storpool',
-               'charm-storpool-block',
-               'charm-storpool-candleholder',
-               'charm-storpool-inventory'
-              ]
+charm_data = \
+    {
+        'charm-cinder-storpool':
+        {
+            'status':
+            [
+                'waiting for the StorPool block presence data',
+                'waiting for the StorPool configuration',
+                'the StorPool Cinder backend should be up and running',
+                'the StorPool Cinder backend should be up and running',
+            ],
+        },
+
+        'charm-storpool-block':
+        {
+            'status':
+            [
+                'waiting for the StorPool configuration',
+                'so far so good so what',
+                'so far so good so what',
+                'so far so good so what',
+            ],
+        },
+
+        'charm-storpool-candleholder':
+        {
+            'status':
+            [
+                'bring on the subordinate charms!',
+                'bring on the subordinate charms!',
+                'bring on the subordinate charms!',
+                'bring on the subordinate charms!',
+            ],
+        },
+
+        'charm-storpool-inventory':
+        {
+            'status':
+            [
+                'waiting for configuration',
+                'waiting for configuration',
+                'waiting for configuration',
+                'submitting the collected data',
+            ],
+        },
+    }
+charm_names = sorted(charm_data.keys())
 charm_series = 'xenial'
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : '
                      '(?P<name> [a-z][a-z-]* ) $',
@@ -32,6 +75,7 @@ Config = collections.namedtuple('Config', [
                                            'suffix',
                                            'noop',
                                            'space',
+                                           'skip',
                                           ])
 
 
@@ -57,6 +101,7 @@ StackConfig = collections.namedtuple('StackConfig', [
                                                      'nova_targets',
 
                                                      'all_machines',
+                                                     'all_targets',
                                                     ])
 
 
@@ -402,6 +447,7 @@ def get_stack_config(cfg, status):
                               cinder_lxd +
                               list(cinder_targets) +
                               list(nova_targets)))
+    all_targets = cinder_targets.union(nova_targets)
 
     return StackConfig(
                        compute_charm=compute_charm,
@@ -416,7 +462,13 @@ def get_stack_config(cfg, status):
                        nova_targets=nova_targets,
 
                        all_machines=all_machines,
+                       all_targets=all_targets,
                       )
+
+
+def get_juju_status():
+    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
+    return json.loads(status_j.decode())
 
 
 def cmd_deploy(cfg):
@@ -434,8 +486,7 @@ def cmd_deploy(cfg):
     short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
 
     sp_msg('Obtaining the current Juju status')
-    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
-    status = json.loads(status_j.decode())
+    status = get_juju_status()
     found = list(filter(lambda name: name in status['applications'],
                         short_names))
     if found:
@@ -540,8 +591,7 @@ def cmd_undeploy(cfg):
     short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
 
     sp_msg('Obtaining the current Juju status')
-    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
-    status = json.loads(status_j.decode())
+    status = get_juju_status()
     found = list(filter(lambda name: name in status['applications'],
                         short_names))
     if not found:
@@ -573,8 +623,7 @@ def cmd_upgrade(cfg):
     short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
 
     sp_msg('Obtaining the current Juju status')
-    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
-    status = json.loads(status_j.decode())
+    status = get_juju_status()
     found = list(filter(lambda name: name in status['applications'],
                         short_names))
     if not found:
@@ -685,14 +734,15 @@ def cmd_dist(cfg):
     sp_msg('')
 
 
-def get_storpool_config(cfg):
+def get_storpool_config(cfg, status=None, stack=None):
     if not cfg.space:
         exit('No StorPool space (-S) specified')
 
-    status_j = subprocess.check_output(['juju', 'status', '--format=json'])
-    status = json.loads(status_j.decode())
+    if status is None:
+        status = get_juju_status()
 
-    st = get_stack_config(cfg, status)
+    if stack is None:
+        stack = get_stack_config(cfg, status)
 
     res = """
 # Autogenerated StorPool test configuration
@@ -704,14 +754,16 @@ SP_EXPECTED_NODES=3
 SP_NODE_NON_VOTING=1
 """
 
-    targets = sorted(st.cinder_targets.union(st.nova_targets))
-    for (oid, tgt) in enumerate(targets):
+    def correct_space(item):
+        return item[1].get('space', None) == cfg.space
+
+    for (oid, tgt) in enumerate(sorted(stack.all_targets)):
         name = subprocess.check_output(['juju', 'ssh', tgt, 'hostname'])
         name = name.decode().split('\n')[0].strip()
         mach = status['machines'][tgt]
         ifaces = list(map(lambda i: i[0],
-                         filter(lambda i: i[1].get('space', None) == cfg.space,
-                                six.iteritems(mach['network-interfaces']))))
+                          filter(correct_space,
+                                 six.iteritems(mach['network-interfaces']))))
         if not ifaces:
             exit('Could not find any "{sp}" interfaces on {name} ({tgt}, {a})'
                  .format(sp=cfg.space, name=name, tgt=tgt, a=mach['dns-name']))
@@ -728,6 +780,329 @@ def cmd_generate_config(cfg):
     print(get_storpool_config(cfg))
 
 
+def get_charm_config(stack, conf, bypass):
+    ch = {
+          'storpool-block': {
+                             'handle_lxc': bool(stack.cinder_lxd),
+                             'storpool_version': '16.02.165.c2e3456-1ubuntu1',
+                             'storpool_openstack_version': '1.3.0-1~1ubuntu1',
+                             'storpool_repo_url':
+                             'http://repo.storpool.com/storpool-maas/',
+                             'storpool_conf': conf,
+                            },
+          'cinder-storpool': {
+                              'storpool_template': 'hybrid-r3',
+                             },
+          'storpool-inventory': {
+                                 'submit_url': 'file:///dev/null',
+                                },
+         }
+
+    if bypass:
+        ch['storpool-block']['bypassed_checks'] = ','.join(sorted(bypass))
+
+    return yaml.dump(ch)
+
+
+def deploy_wait(idx):
+    reached = False
+    max_itr = 60
+    for itr in range(max_itr):
+        sp_msg('- iteration {itr} of {max_itr}'
+               .format(itr=itr + 1, max_itr=max_itr))
+        sp_msg('  - obtaining the Juju status')
+        cstatus = get_juju_status()
+        sp_msg('  - comparing the status of the charms')
+        pending = False
+        for fname in charm_names:
+            name = fname.replace('charm-', '')
+            expected = charm_data[fname]['status'][idx]
+
+            d = cstatus['applications'].get(name, None)
+            if d is None:
+                exit('The {name} charm is not there'.format(name=name))
+            stati = [d['application-status']]
+            if 'units' in d:
+                stati.extend(map(lambda v: v['workload-status'],
+                                 six.itervalues(d['units'])))
+
+            charm_pending = False
+            for sta in stati:
+                msg = sta.get('message', '(no message)')
+                if sta['current'] == 'error':
+                    exit('The {name} charm is in the "error" state: {msg}'
+                         .format(name=name, msg=msg))
+                elif msg != expected and not charm_pending:
+                    sp_msg('    - "{msg}" instead of "{exp}" for {name}'
+                           .format(msg=msg, exp=expected, name=name))
+                    charm_pending = True
+                    pending = True
+
+        if not pending:
+            sp_msg('All the charms reached their expected status!')
+            reached = True
+            break
+        sp_msg('  - apparently not yet, waiting')
+        time.sleep(5)
+
+    if not reached:
+        exit('Some charms did not reach their expected status')
+
+
+def undeploy_wait():
+    reached = False
+    for itr in range(60):
+        sp_msg('- iteration {itr} of 60'.format(itr=itr + 1))
+        sp_msg('  - obtaining the Juju status')
+        cstatus = get_juju_status()
+        sp_msg('  - examining the status of the charms')
+        pending = False
+        for fname in charm_names:
+            name = fname.replace('charm-', '')
+            d = cstatus['applications'].get(name, None)
+            if d is None:
+                continue
+            stati = [d['application-status']]
+            if 'units' in d:
+                stati.extend(map(lambda v: v['workload-status'],
+                                 six.itervalues(d['units'])))
+
+            charm_pending = False
+            for sta in stati:
+                msg = sta.get('message', '(no message)')
+                if sta['current'] == 'error':
+                    exit('The {name} charm is in the "error" state: {msg}'
+                         .format(name=name, msg=msg))
+                elif not charm_pending:
+                    sp_msg('    - {name} still there'.format(name=name))
+                    charm_pending = True
+                    pending = True
+
+        if not pending:
+            sp_msg('All the charms are gone!')
+            reached = True
+            break
+        sp_msg('  - apparently not yet, waiting')
+        time.sleep(5)
+
+    if not reached:
+        exit('Some charms could not be removed')
+
+
+def check_systemd_units(stack, expected):
+    sp_msg('Checking for the StorPool service unit files')
+    services = ('storpool_beacon.service', 'storpool_block.service')
+    for mach in sorted(stack.all_targets):
+        output = subprocess.check_output([
+                                          'juju',
+                                          'ssh',
+                                          mach,
+                                          'systemctl',
+                                          '--no-pager',
+                                          'list-unit-files',
+                                         ]).decode()
+        found = set()
+        for line in output.split('\n'):
+            line = line.strip()
+            words = line.split()
+            if words and words[0] in services:
+                if expected:
+                    if 'enabled' not in words[1]:
+                        exit('The {svc} service is not enabled on machine '
+                             '{mach}: {line}'.format(svc=words[0],
+                                                     mach=mach,
+                                                     line=line))
+                    else:
+                        found.add(words[0])
+                else:
+                    if 'masked' not in words[1]:
+                        exit('The {svc} service is not masked on machine '
+                             '{mach}: {line}'.format(svc=words[0],
+                                                     mach=mach,
+                                                     line=line))
+        if expected and len(found) != len(services):
+            missing = ' '.join(sorted(set(services).difference(found)))
+            exit('Services not found on machine {mach}: {missing}'
+                 .format(mach=mach, missing=missing))
+
+
+def cmd_deploy_test(cfg):
+    valid_skip_stages = (
+                         'assert-not-deployed',
+                         'build',
+                         'first-deploy',
+                         'first-deploy-wait',
+                         'first-undeploy',
+                         'first-undeploy-wait',
+                         'second-deploy',
+                         'config-block',
+                         'wait-block',
+                         'config-cinder',
+                         'wait-cinder',
+                         'config-inventory',
+                         'wait-inventory',
+                         'second-undeploy',
+                        )
+    if cfg.skip:
+        skip_stages = cfg.skip.split(',')
+        invalid_skip_stages = list(filter(lambda s: s not in valid_skip_stages,
+                                          skip_stages))
+        if invalid_skip_stages:
+            exit('Invalid skip stages "{invalid}" specified; should be one or '
+                 'more of {valid}'
+                 .format(invalid=','.join(invalid_skip_stages),
+                         valid=','.join(valid_skip_stages)))
+        skip_stages = set(skip_stages)
+    else:
+        skip_stages = set()
+
+    basedir = os.getcwd()
+
+    sp_msg('Get the current Juju status')
+    status = get_juju_status()
+    if 'assert-not-deployed' not in skip_stages:
+        found = list(filter(lambda s: 'storpool' in s,
+                     status['applications'].keys()))
+        if found:
+            exit('Please remove any StorPool-related charms first; '
+                 'found {found}'.format(found=found))
+
+    sp_msg('Examine the current Juju status for Cinder and Nova')
+    stack = get_stack_config(cfg, status)
+
+    if 'assert-not-deployed' not in skip_stages:
+        check_systemd_units(stack, False)
+
+    sp_msg('Check if any checks need to be bypassed')
+    bypass = set(['use_cgroups'])
+    for name in stack.all_machines:
+        sp_msg('- checking machine {name}'.format(name=name))
+
+        sp_msg('  - checking for the number of CPUs')
+        cpucount = subprocess.check_output([
+                                            'juju',
+                                            'ssh',
+                                            name,
+                                            'egrep',
+                                            '-ce',
+                                            '^processor[[:space:]]',
+                                            '/proc/cpuinfo',
+                                           ]).decode()
+        first_line = cpucount.split('\n')[0].strip()
+        try:
+            cnt = int(first_line)
+        except ValueError:
+            exit('Unexpected output from the processors count check for '
+                 'machine {name}:\n{count}'.format(name=name, count=cpucount))
+        if cnt < 4:
+            sp_msg('    - bypassing the CPU count check')
+            bypass.add('very_few_cpus')
+
+        sp_msg('  - checking for the available memory')
+        memunit = subprocess.check_output([
+                                            'juju',
+                                            'ssh',
+                                            name,
+                                            'head',
+                                            '-n1',
+                                            '/proc/meminfo',
+                                           ]).decode()
+        first_line = memunit.split('\n')[0].strip()
+        words = first_line.split()
+        if len(words) != 3:
+            exit('Unexpected output from the /proc/meminfo check for '
+                 'machine {name}:\n{line}'.format(name=name, line=first_line))
+        elif words[2] == 'kB':
+            sp_msg('    - forcing a low-memory calculation')
+            bypass.add('very_little_memory')
+
+    sp_msg('Bypassing checks: {b}'.format(b=','.join(sorted(bypass))))
+
+    sp_msg('Generate a sample StorPool config')
+    conf = get_storpool_config(cfg, status=status, stack=stack)
+    sp_msg('Generated a config file:\n{conf}'.format(conf=conf))
+
+    sp_msg('Generate a full StorPool charms configuration')
+    charmconf = get_charm_config(stack, conf, bypass)
+    sp_msg('Generated charms configuration:\n{conf}'.format(conf=charmconf))
+
+    def configure(charm):
+        sp_msg('Now configuring {charm}'.format(charm=charm))
+        with tempfile.NamedTemporaryFile(dir='/tmp',
+                                         mode='w+t',
+                                         delete=True) as tempf:
+            print(charmconf, file=tempf, end='')
+            tempf.flush()
+            subprocess.check_call([
+                                   'juju',
+                                   'config',
+                                   '--file',
+                                   tempf.name,
+                                   charm,
+                                  ])
+
+    if 'build' not in skip_stages:
+        sp_msg('Now running a build')
+        cmd_build(cfg)
+        os.chdir(basedir)
+
+    if 'first-deploy' not in skip_stages:
+        sp_msg('Now doing the initial deployment')
+        cmd_deploy(cfg)
+        os.chdir(basedir)
+
+    if 'first-deploy-wait' not in skip_stages:
+        sp_msg('Now waiting until the charms reach their first stage')
+        deploy_wait(0)
+        check_systemd_units(stack, False)
+
+    if 'first-undeploy' not in skip_stages:
+        sp_msg('Removing the applications')
+        cmd_undeploy(cfg)
+        os.chdir(basedir)
+
+    if 'first-undeploy-wait' not in skip_stages:
+        sp_msg('Waiting for the applications to disappear')
+        undeploy_wait()
+        check_systemd_units(stack, False)
+
+    if 'second-deploy' not in skip_stages:
+        sp_msg('Now deploying the charms again')
+        cmd_deploy(cfg)
+        os.chdir(basedir)
+
+    if 'config-block' not in skip_stages:
+        configure('storpool-block')
+
+    if 'wait-block' not in skip_stages:
+        deploy_wait(1)
+        check_systemd_units(stack, True)
+
+    if 'config-cinder' not in skip_stages:
+        configure('cinder-storpool')
+
+    if 'wait-cinder' not in skip_stages:
+        deploy_wait(2)
+        check_systemd_units(stack, True)
+
+    if 'config-inventory' not in skip_stages:
+        configure('storpool-inventory')
+
+    if 'wait-inventory' not in skip_stages:
+        deploy_wait(3)
+        check_systemd_units(stack, True)
+
+    if 'second-undeploy' not in skip_stages:
+        sp_msg('Removing the applications')
+        cmd_undeploy(cfg)
+        os.chdir(basedir)
+
+    if 'second-undeploy-wait' not in skip_stages:
+        sp_msg('Waiting for the applications to disappear')
+        undeploy_wait()
+        check_systemd_units(stack, False)
+
+
 commands = {
     'build': cmd_build,
     'deploy': cmd_deploy,
@@ -737,6 +1112,7 @@ commands = {
     'undeploy': cmd_undeploy,
     'upgrade': cmd_upgrade,
     'generate-config': cmd_generate_config,
+    'deploy-test': cmd_deploy_test,
 }
 
 
@@ -748,6 +1124,7 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] [-d basedir] undeploy
 
     storpool-charms [-N] -S storpool-space generate-config
+    storpool-charms [-N] -S storpool-space deploy-test
 
     storpool-charms [-N] [-d basedir] checkout
     storpool-charms [-N] [-d basedir] pull
@@ -768,6 +1145,8 @@ parser.add_argument('-s', '--suffix',
 parser.add_argument('-U', '--baseurl', default=baseurl,
                     help='specify the base URL for the StorPool Git '
                     'repositories')
+parser.add_argument('-X', '--skip',
+                    help='specify stages to skip during the deploy test')
 parser.add_argument('command', choices=sorted(commands.keys()))
 
 args = parser.parse_args()
@@ -777,5 +1156,6 @@ cfg = Config(
     suffix=args.suffix,
     noop=args.noop,
     space=args.space,
+    skip=args.skip,
 )
 commands[args.command](cfg)
