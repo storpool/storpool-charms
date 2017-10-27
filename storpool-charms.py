@@ -734,6 +734,16 @@ def cmd_dist(cfg):
     sp_msg('')
 
 
+def juju_ssh_single_line(cmd):
+    output = subprocess.check_output(cmd).decode()
+    lines = output.split('\n')
+    for line in lines:
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return ''
+
+
 def get_storpool_config(cfg, status=None, stack=None):
     if not cfg.space:
         exit('No StorPool space (-S) specified')
@@ -758,8 +768,7 @@ SP_NODE_NON_VOTING=1
         return item[1].get('space', None) == cfg.space
 
     for (oid, tgt) in enumerate(sorted(stack.all_targets)):
-        name = subprocess.check_output(['juju', 'ssh', tgt, 'hostname'])
-        name = name.decode().split('\n')[0].strip()
+        name = juju_ssh_single_line(['juju', 'ssh', tgt, 'hostname'])
         mach = status['machines'][tgt]
         ifaces = list(map(lambda i: i[0],
                           filter(correct_space,
@@ -945,11 +954,14 @@ def cmd_deploy_test(cfg):
                          'second-deploy',
                          'config-block',
                          'wait-block',
+                         'check-block',
                          'config-cinder',
                          'wait-cinder',
+                         'check-cinder',
                          'config-inventory',
                          'wait-inventory',
                          'second-undeploy',
+                         'second-undeploy-wait',
                         )
     if cfg.skip:
         skip_stages = cfg.skip.split(',')
@@ -987,35 +999,33 @@ def cmd_deploy_test(cfg):
         sp_msg('- checking machine {name}'.format(name=name))
 
         sp_msg('  - checking for the number of CPUs')
-        cpucount = subprocess.check_output([
-                                            'juju',
-                                            'ssh',
-                                            name,
-                                            'egrep',
-                                            '-ce',
-                                            '^processor[[:space:]]',
-                                            '/proc/cpuinfo',
-                                           ]).decode()
-        first_line = cpucount.split('\n')[0].strip()
+        first_line = juju_ssh_single_line([
+                                           'juju',
+                                           'ssh',
+                                           name,
+                                           'egrep',
+                                           '-ce',
+                                           '^processor[[:space:]]',
+                                           '/proc/cpuinfo',
+                                          ])
         try:
             cnt = int(first_line)
         except ValueError:
             exit('Unexpected output from the processors count check for '
-                 'machine {name}:\n{count}'.format(name=name, count=cpucount))
+                 'machine {name}:\n{line}'.format(name=name, line=first_line))
         if cnt < 4:
             sp_msg('    - bypassing the CPU count check')
             bypass.add('very_few_cpus')
 
         sp_msg('  - checking for the available memory')
-        memunit = subprocess.check_output([
-                                            'juju',
-                                            'ssh',
-                                            name,
-                                            'head',
-                                            '-n1',
-                                            '/proc/meminfo',
-                                           ]).decode()
-        first_line = memunit.split('\n')[0].strip()
+        first_line = juju_ssh_single_line([
+                                           'juju',
+                                           'ssh',
+                                           name,
+                                           'head',
+                                           '-n1',
+                                           '/proc/meminfo',
+                                          ])
         words = first_line.split()
         if len(words) != 3:
             exit('Unexpected output from the /proc/meminfo check for '
@@ -1086,12 +1096,57 @@ def cmd_deploy_test(cfg):
         deploy_wait(1)
         check_systemd_units(stack, True)
 
+    if 'check-block' not in skip_stages:
+        sp_msg('Verifying `storpool_showconf -ne SP_OURID`')
+        for (oid, mach) in enumerate(sorted(stack.all_targets)):
+            line = juju_ssh_single_line([
+                                         'juju',
+                                         'ssh',
+                                         mach,
+                                         'storpool_showconf',
+                                         '-ne',
+                                         'SP_OURID',
+                                        ])
+            if not line:
+                exit('Could not run storpool_showconf on machine {mach}'
+                     .format(mach=mach))
+            bad = False
+            try:
+                moid = int(line)
+                if moid != oid + 40:
+                    bad = True
+            except ValueError:
+                bad = True
+            if bad:
+                exit('Unexpected output from `storpool_showconf -ne '
+                     'SP_OURID` on machine {mach}: {line} (expected: {exp})'
+                     .format(mach=mach, line=line, exp=oid + 40))
+
     if 'config-cinder' not in skip_stages:
         configure('cinder-storpool')
 
     if 'wait-cinder' not in skip_stages:
         deploy_wait(2)
         check_systemd_units(stack, True)
+
+    if 'check-cinder' not in skip_stages:
+        # Let's give Cinder a bit of time to write out the config file
+        sp_msg('Giving Cinder some time to settle')
+        time.sleep(15)
+        sp_msg('Checking for cinder-storpool in /etc/cinder/cinder.conf')
+        for mach in stack.cinder_lxd + stack.cinder_bare:
+            line = juju_ssh_single_line([
+                                         'juju',
+                                         'ssh',
+                                         mach,
+                                         'sudo',
+                                         'fgrep',
+                                         'cinder-storpool',
+                                         '/etc/cinder/cinder.conf',
+                                        ])
+            if not line:
+                exit('No cinder-storpool in /etc/cinder/cinder.conf on '
+                     'machine {mach}'.format(mach=mach))
 
     if 'config-inventory' not in skip_stages:
         configure('storpool-inventory')
