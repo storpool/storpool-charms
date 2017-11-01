@@ -229,12 +229,30 @@ def parse_layers(cfg, name, to_process, layers_required):
 def checkout_element(cfg, name, to_process, layers_required=False):
     checkout_repository(cfg, name)
     sp_chdir(cfg, name)
-    sp_msg('- running flake8')
-    sp_run(cfg, ['flake8', '.'])
-    sp_msg('- running pep8')
-    sp_run(cfg, ['pep8', '.'])
     parse_layers(cfg, name, to_process, layers_required)
     sp_chdir(cfg, '../../charms')
+
+
+def test_element(cfg):
+    if os.path.isfile('tox.ini'):
+        sp_msg('- running pep8/flake8 through tox')
+        sp_run(cfg, ['tox', '-e', 'pep8'])
+        sp_msg('- running all the tox tests')
+        sp_run(cfg, ['tox', '-e', 'ALL'])
+    else:
+        sp_msg('- no tox.ini file, running some tests by ourselves')
+        sp_msg('- running flake8')
+        sp_run(cfg, ['flake8', '.'])
+        sp_msg('- running pep8')
+        sp_run(cfg, ['pep8', '.'])
+
+
+def test_elements(cfg, paths):
+    for path in paths:
+        print('\n===== Testing {path}\n'.format(path=path))
+        sp_chdir(cfg, '../' + path)
+        test_element(cfg)
+        sp_chdir(cfg, '../')
 
 
 def sp_recurse(cfg, process_charm, process_element):
@@ -281,15 +299,21 @@ def cmd_checkout(cfg):
     def process_charm(name, to_process):
         sp_msg('Checking out the {name} charm'.format(name=name))
         checkout_element(cfg, name, to_process, layers_required=True)
+        processed.append('charms/' + name)
 
     def process_element(cfg, elem, to_process):
         sp_msg('Checking out the {name} {type}'
                .format(name=elem.name, type=elem.type))
         checkout_element(cfg, elem.fname, to_process)
+        processed.append(elem.type + 's/' + elem.fname)
 
+    processed = []
     sp_recurse(cfg,
                process_charm=process_charm,
                process_element=process_element)
+
+    test_elements(cfg, sorted(processed))
+
     sp_msg('The StorPool charms were checked out into {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
     sp_msg('')
@@ -312,6 +336,7 @@ def cmd_pull(cfg):
         sp_chdir(cfg, elem.fname)
         sp_run(cfg, ['git', 'pull', '--ff-only'])
         parse_layers(cfg, elem.name, to_process, False)
+        processed.append(elem.type + 's/' + elem.fname)
         sp_chdir(cfg, '../')
 
     def process_charm(name, to_process):
@@ -324,9 +349,13 @@ def cmd_pull(cfg):
         )
         process_element(cfg, elem, to_process)
 
+    processed = []
     sp_recurse(cfg,
                process_charm=process_charm,
                process_element=process_element)
+
+    test_elements(cfg, sorted(processed))
+
     sp_msg('The StorPool charms were updated in {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
     sp_msg('')
