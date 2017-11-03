@@ -76,6 +76,7 @@ Config = collections.namedtuple('Config', [
                                            'noop',
                                            'space',
                                            'skip',
+                                           'repo_auth',
                                           ])
 
 
@@ -825,7 +826,8 @@ def get_charm_config(stack, conf, bypass):
                              'storpool_version': '16.02.165.c2e3456-1ubuntu1',
                              'storpool_openstack_version': '1.3.0-1~1ubuntu1',
                              'storpool_repo_url':
-                             'http://repo.storpool.com/storpool-maas/',
+                             'http://{auth}@repo.storpool.com/storpool-maas/'
+                             .format(auth=cfg.repo_auth),
                              'storpool_conf': conf,
                             },
           'cinder-storpool': {
@@ -843,6 +845,8 @@ def get_charm_config(stack, conf, bypass):
 
 
 def cmd_generate_charm_config(cfg):
+    if cfg.repo_auth is None:
+        exit('No repository username:password (-A) specified')
     status = get_juju_status()
     stack = get_stack_config(cfg, status)
     conf = get_storpool_config(cfg, status=status)
@@ -973,6 +977,9 @@ def check_systemd_units(stack, expected):
 
 
 def cmd_deploy_test(cfg):
+    if cfg.repo_auth is None:
+        exit('No repository username:password (-A) specified')
+
     valid_skip_stages = (
                          'assert-not-deployed',
                          'build',
@@ -1217,6 +1224,7 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] [-d basedir] undeploy
 
     storpool-charms [-N] -S storpool-space generate-config
+    storpool-charms [-N] -S storpool-space -A repo_username:repo_password generate-charm-config
     storpool-charms [-N] -S storpool-space deploy-test
 
     storpool-charms [-N] [-d basedir] checkout
@@ -1240,6 +1248,8 @@ parser.add_argument('-U', '--baseurl', default=baseurl,
                     'repositories')
 parser.add_argument('-X', '--skip',
                     help='specify stages to skip during the deploy test')
+parser.add_argument('-A', '--repo-auth',
+                    help='specify the StorPool repository authentication data')
 parser.add_argument('command', choices=sorted(commands.keys()))
 
 args = parser.parse_args()
@@ -1250,5 +1260,6 @@ cfg = Config(
     noop=args.noop,
     space=args.space,
     skip=args.skip,
+    repo_auth=args.repo_auth,
 )
 commands[args.command](cfg)
