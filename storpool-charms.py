@@ -240,6 +240,9 @@ def test_element(cfg):
         sp_run(cfg, ['tox', '-e', 'pep8'])
         sp_msg('- running all the tox tests')
         sp_run(cfg, ['tox', '-e', 'ALL'])
+        # Sigh... the build gets confused.  A lot.
+        sp_msg('- removing the .tox/ directory')
+        sp_run(cfg, ['rm', '-rf', '.tox/'])
     else:
         sp_msg('- no tox.ini file, running some tests by ourselves')
         sp_msg('- running flake8')
