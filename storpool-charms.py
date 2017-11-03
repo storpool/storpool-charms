@@ -1236,7 +1236,7 @@ parser = argparse.ArgumentParser(
 
     storpool-charms [-N] -S storpool-space generate-config
     storpool-charms [-N] -S storpool-space -A repo_username:repo_password generate-charm-config
-    storpool-charms [-N] -S storpool-space deploy-test
+    storpool-charms [-N] -S storpool-space -A repo_username:repo_password deploy-test
 
     storpool-charms [-N] [-d basedir] [-X tox] checkout
     storpool-charms [-N] [-d basedir] [-X tox] pull
