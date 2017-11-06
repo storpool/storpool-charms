@@ -316,12 +316,6 @@ def cmd_checkout(cfg):
                process_charm=process_charm,
                process_element=process_element)
 
-    if cfg.skip is not None and 'tox' in cfg.skip.split(','):
-        sp_msg('Skipping the tox tests as requested (-X tox)')
-    else:
-        sp_msg('Running the tox tests; use "-X tox" to skip them')
-        test_elements(cfg, sorted(processed))
-
     sp_msg('The StorPool charms were checked out into {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
     sp_msg('')
@@ -361,12 +355,6 @@ def cmd_pull(cfg):
     sp_recurse(cfg,
                process_charm=process_charm,
                process_element=process_element)
-
-    if cfg.skip is not None and 'tox' in cfg.skip.split(','):
-        sp_msg('Skipping the tox tests as requested (-X tox)')
-    else:
-        sp_msg('Running the tox tests; use "-X tox" to skip them')
-        test_elements(cfg, sorted(processed))
 
     sp_msg('The StorPool charms were updated in {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
@@ -1282,8 +1270,8 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] -S storpool-space -A repo_username:repo_password generate-charm-config
     storpool-charms [-N] -S storpool-space -A repo_username:repo_password deploy-test
 
-    storpool-charms [-N] [-d basedir] [-X tox] checkout
-    storpool-charms [-N] [-d basedir] [-X tox] pull
+    storpool-charms [-N] [-d basedir] checkout
+    storpool-charms [-N] [-d basedir] pull
     storpool-charms [-N] [-d basedir] test
     storpool-charms [-N] [-d basedir] build
     storpool-charms [-N] [-d basedir] dist
