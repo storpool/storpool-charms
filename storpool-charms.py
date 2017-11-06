@@ -373,6 +373,49 @@ def cmd_pull(cfg):
     sp_msg('')
 
 
+def cmd_test(cfg):
+    subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
+    sp_msg('Running tox tests for the charms in the {d} directory'.format(d=subdir_full))
+    try:
+        sp_chdir(cfg, subdir_full)
+    except Exception as e:
+        if is_file_not_found(e):
+            exit('The {d} directory does not seem to exist!'
+                 .format(d=subdir_full))
+        raise
+
+    def process_element(cfg, elem, to_process):
+        sp_msg('Examining the {name} {type}'
+               .format(name=elem.name, type=elem.type))
+        sp_chdir(cfg, elem.fname)
+        parse_layers(cfg, elem.name, to_process, False)
+        processed.append(elem.type + 's/' + elem.fname)
+        sp_chdir(cfg, '../')
+
+    def process_charm(name, to_process):
+        elem = Element(
+            name=name,
+            type='charm',
+            parent_dir='',
+            fname=name,
+            exists=True,
+        )
+        process_element(cfg, elem, to_process)
+
+    processed = []
+    sp_recurse(cfg,
+               process_charm=process_charm,
+               process_element=process_element)
+
+    sp_msg('Running the tox tests for {count} elements'
+           .format(count=len(processed)))
+    test_elements(cfg, sorted(processed))
+
+    sp_msg('The StorPool charms were tested in {basedir}/{subdir}'
+           .format(basedir=cfg.basedir, subdir=subdir))
+    sp_msg('')
+
+
 def charm_build_dir(basedir, name):
     return '{base}/built/{series}/{name}'.format(base=basedir,
                                                  series=charm_series,
@@ -1224,6 +1267,7 @@ commands = {
     'generate-config': cmd_generate_config,
     'generate-charm-config': cmd_generate_charm_config,
     'deploy-test': cmd_deploy_test,
+    'test': cmd_test,
 }
 
 
@@ -1240,6 +1284,7 @@ parser = argparse.ArgumentParser(
 
     storpool-charms [-N] [-d basedir] [-X tox] checkout
     storpool-charms [-N] [-d basedir] [-X tox] pull
+    storpool-charms [-N] [-d basedir] test
     storpool-charms [-N] [-d basedir] build
     storpool-charms [-N] [-d basedir] dist
 
