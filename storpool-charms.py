@@ -873,19 +873,19 @@ def cmd_generate_config(cfg):
 
 
 def get_charm_config(stack, conf, bypass):
+    common = {
+        'storpool_version': '16.02.165.c2e3456-1ubuntu1',
+        'storpool_openstack_version': '1.3.0-1~1ubuntu1',
+        'storpool_repo_url':
+            'http://{auth}@repo.storpool.com/storpool-maas/'
+            .format(auth=cfg.repo_auth),
+        'storpool_conf': conf,
+    }
+    cinder = dict(common)
+    cinder['storpool_template'] = 'hybrid-r3'
     ch = {
-          'storpool-block': {
-                             'handle_lxc': bool(stack.cinder_lxd),
-                             'storpool_version': '16.02.165.c2e3456-1ubuntu1',
-                             'storpool_openstack_version': '1.3.0-1~1ubuntu1',
-                             'storpool_repo_url':
-                             'http://{auth}@repo.storpool.com/storpool-maas/'
-                             .format(auth=cfg.repo_auth),
-                             'storpool_conf': conf,
-                            },
-          'cinder-storpool': {
-                              'storpool_template': 'hybrid-r3',
-                             },
+          'storpool-block': common,
+          'cinder-storpool': cinder,
           'storpool-inventory': {
                                  'submit_url': 'file:///dev/null',
                                 },
