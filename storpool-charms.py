@@ -839,7 +839,9 @@ SP_NODE_NON_VOTING=1
     def correct_space(item):
         return item[1].get('space', None) == cfg.space
 
+    sp_ids = {}
     for (oid, tgt) in enumerate(sorted(stack.all_targets)):
+        sp_ids[tgt] = oid
         name = juju_ssh_single_line(['juju', 'ssh', tgt, 'hostname'])
         mach = status['machines'][tgt]
         ifaces = list(map(lambda i: i[0],
@@ -853,6 +855,15 @@ SP_NODE_NON_VOTING=1
 SP_OURID={oid}
 SP_IFACE={ifaces}
 """.format(name=name, oid=oid + 40, ifaces=','.join(ifaces))
+
+    for tgt in sorted(stack.cinder_lxd):
+        name = juju_ssh_single_line(['juju', 'ssh', tgt, 'hostname'])
+        mach_id = tgt.split('/')[0]
+        oid = sp_ids[mach_id]
+        res += """
+[{name}]
+SP_OURID={oid}
+""".format(name=name, oid=oid + 40)
 
     return res
 
