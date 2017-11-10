@@ -893,6 +893,7 @@ def get_charm_config(stack, conf, bypass):
 
     if bypass:
         ch['storpool-block']['bypassed_checks'] = ','.join(sorted(bypass))
+        ch['cinder-storpool']['bypassed_checks'] = ','.join(sorted(bypass))
 
     return yaml.dump(ch)
 
