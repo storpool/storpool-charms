@@ -509,11 +509,7 @@ def get_stack_config(cfg, status):
         cinder_machines = sorted(cinder_targets)
 
     if nova_targets.intersection(cinder_targets):
-        exit('Cinder and Nova deployed on the same machines ({same}) is '
-             'not supported'
-             .format(same=', '
-                     .join(sorted(nova_targets
-                                  .intersection(cinder_targets)))))
+        cinder_machines = list(cinder_targets.difference(nova_targets))
 
     all_machines = sorted(set(cinder_bare +
                               cinder_lxd +
@@ -598,27 +594,31 @@ def cmd_deploy(cfg):
                 ])
 
     if st.cinder_lxd:
-        sp_msg('Deploying the storpool-candleholder charm to {machines}'
-               .format(machines=', '.join(st.cinder_machines)))
-        sp_run(cfg, [
-                     'juju',
-                     'deploy',
-                     '-n',
-                     str(len(st.cinder_machines)),
-                     '--to',
-                     ','.join(st.cinder_machines),
-                     '--',
-                     charm_deploy_dir(basedir, 'storpool-candleholder')
-                    ])
+        if st.cinder_machines:
+            sp_msg('Deploying the storpool-candleholder charm to {machines}'
+                   .format(machines=', '.join(st.cinder_machines)))
+            sp_run(cfg, [
+                         'juju',
+                         'deploy',
+                         '-n',
+                         str(len(st.cinder_machines)),
+                         '--to',
+                         ','.join(st.cinder_machines),
+                         '--',
+                         charm_deploy_dir(basedir, 'storpool-candleholder')
+                        ])
 
-        sp_msg('Linking the storpool-candleholder charm with '
-               'the storpool-block charm')
-        sp_run(cfg, [
-                     'juju',
-                     'add-relation',
-                     'storpool-candleholder:juju-info',
-                     'storpool-block:juju-info'
-                    ])
+            sp_msg('Linking the storpool-candleholder charm with '
+                   'the storpool-block charm')
+            sp_run(cfg, [
+                         'juju',
+                         'add-relation',
+                         'storpool-candleholder:juju-info',
+                         'storpool-block:juju-info'
+                        ])
+        else:
+            sp_msg('Apparently Cinder and Nova are on the same machines; '
+                   'skipping the storpool-candleholder deployment')
     else:
         sp_msg('Linking the storpool-block charm with the {cinder} charm'
                .format(cinder=st.storage_charm))
