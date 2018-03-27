@@ -72,6 +72,7 @@ re_elem = re.compile('(?P<type> (?: layer | interface ) ) : '
 Config = collections.namedtuple('Config', [
                                            'basedir',
                                            'baseurl',
+                                           'branches_file',
                                            'suffix',
                                            'noop',
                                            'space',
@@ -162,7 +163,7 @@ def check_repository(cfg, url):
         return True
 
 
-def checkout_repository(cfg, name):
+def checkout_repository(cfg, name, branches):
     url = '{base}/{name}.git'.format(base=cfg.baseurl, name=name)
     try:
         if not check_repository(cfg, url):
@@ -174,7 +175,11 @@ def checkout_repository(cfg, name):
              .format(name=name, url=url, e=e))
     sp_msg('Checking out {url}'.format(url=url))
     try:
-        sp_run(cfg, ['git', 'clone', '--', url])
+        branch = branches.get(name)
+        if branch is not None:
+            sp_run(cfg, ['git', 'clone', '-b', branch, '--', url])
+        else:
+            sp_run(cfg, ['git', 'clone', '--', url])
     except Exception:
         exit('Could not check out the {name} module'.format(name=name))
 
@@ -227,8 +232,8 @@ def parse_layers(cfg, name, to_process, layers_required):
         ))
 
 
-def checkout_element(cfg, name, to_process, layers_required=False):
-    checkout_repository(cfg, name)
+def checkout_element(cfg, name, branches, to_process, layers_required=False):
+    checkout_repository(cfg, name, branches)
     sp_chdir(cfg, name)
     parse_layers(cfg, name, to_process, layers_required)
     sp_chdir(cfg, '../../charms')
@@ -293,6 +298,27 @@ def cmd_checkout(cfg):
                  .format(d=cfg.basedir))
         raise
 
+    if cfg.branches_file is not None:
+        fn = cfg.branches_file
+        sp_msg('Loading branches information from {fn}'.format(fn=fn))
+        try:
+            contents = open(fn, mode='r').read()
+        except Exception as e:
+            exit('Could not load the branches file {fn}: {e}'
+                 .format(fn=fn, e=e))
+        try:
+            data = yaml.load(contents)
+        except Exception as e:
+            exit('Could not parse the branches file {fn} as YAML: {e}'
+                 .format(fn=fn, e=e))
+        if not isinstance(data, dict) or 'branches' not in data or \
+           not isinstance(data['branches'], dict) or \
+           list(filter(lambda v: not isinstance(v, str), data['branches'])):
+            exit('Invalid format for the branches file {fn}'.format(fn=fn))
+        branches = data['branches']
+    else:
+        branches = {}
+
     sp_msg('Recreating the {subdir}/ tree'.format(subdir=subdir))
     sp_run(cfg, ['rm', '-rf', '--', subdir])
     sp_mkdir(cfg, subdir)
@@ -302,13 +328,13 @@ def cmd_checkout(cfg):
 
     def process_charm(name, to_process):
         sp_msg('Checking out the {name} charm'.format(name=name))
-        checkout_element(cfg, name, to_process, layers_required=True)
+        checkout_element(cfg, name, branches, to_process, layers_required=True)
         processed.append('charms/' + name)
 
     def process_element(cfg, elem, to_process):
         sp_msg('Checking out the {name} {type}'
                .format(name=elem.name, type=elem.type))
-        checkout_element(cfg, elem.fname, to_process)
+        checkout_element(cfg, elem.fname, branches, to_process)
         processed.append(elem.type + 's/' + elem.fname)
 
     processed = []
@@ -1271,7 +1297,7 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] -S storpool-space -A repo_username:repo_password generate-charm-config
     storpool-charms [-N] -S storpool-space -A repo_username:repo_password deploy-test
 
-    storpool-charms [-N] [-d basedir] checkout
+    storpool-charms [-N] [-B branches-file] [-d basedir] checkout
     storpool-charms [-N] [-d basedir] pull
     storpool-charms [-N] [-d basedir] test
     storpool-charms [-N] [-d basedir] build
@@ -1297,12 +1323,15 @@ parser.add_argument('-X', '--skip',
                     help='specify stages to skip during the deploy test')
 parser.add_argument('-A', '--repo-auth',
                     help='specify the StorPool repository authentication data')
+parser.add_argument('-B', '--branches-file',
+                    help='specify the YAML file listing the branches to check out')
 parser.add_argument('command', choices=sorted(commands.keys()))
 
 args = parser.parse_args()
 cfg = Config(
     basedir=args.basedir,
     baseurl=args.baseurl,
+    branches_file=args.branches_file,
     suffix=args.suffix,
     noop=args.noop,
     space=args.space,
