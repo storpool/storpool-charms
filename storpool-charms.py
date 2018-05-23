@@ -50,17 +50,6 @@ charm_data = \
                 'bring on the subordinate charms!',
             ],
         },
-
-        'charm-storpool-inventory':
-        {
-            'status':
-            [
-                'waiting for configuration',
-                'waiting for configuration',
-                'waiting for configuration',
-                'submitting the collected data',
-            ],
-        },
     }
 charm_names = sorted(charm_data.keys())
 charm_series = 'xenial'
@@ -586,19 +575,6 @@ def cmd_deploy(cfg):
 
     st = get_stack_config(cfg, status)
 
-    sp_msg('Deploying the storpool-inventory charm everywhere ({all})'
-           .format(all=', '.join(st.all_machines)))
-    sp_run(cfg, [
-                 'juju',
-                 'deploy',
-                 '-n',
-                 str(len(st.all_machines)),
-                 '--to',
-                 ','.join(st.all_machines),
-                 '--',
-                 charm_deploy_dir(basedir, 'storpool-inventory'),
-                ])
-
     sp_msg('Deploying the storpool-block charm')
     sp_run(cfg, [
                  'juju',
@@ -898,9 +874,6 @@ def get_charm_config(stack, conf, bypass):
           'cinder-storpool': {
                               'storpool_template': 'hybrid-r3',
                              },
-          'storpool-inventory': {
-                                 'submit_url': 'file:///dev/null',
-                                },
          }
 
     if bypass:
@@ -1060,8 +1033,6 @@ def cmd_deploy_test(cfg):
                          'config-cinder',
                          'wait-cinder',
                          'check-cinder',
-                         'config-inventory',
-                         'wait-inventory',
                          'second-undeploy',
                          'second-undeploy-wait',
                         )
@@ -1249,13 +1220,6 @@ def cmd_deploy_test(cfg):
             if not line:
                 exit('No cinder-storpool in /etc/cinder/cinder.conf on '
                      'machine {mach}'.format(mach=mach))
-
-    if 'config-inventory' not in skip_stages:
-        configure('storpool-inventory')
-
-    if 'wait-inventory' not in skip_stages:
-        deploy_wait(3)
-        check_systemd_units(stack, True)
 
     if 'second-undeploy' not in skip_stages:
         sp_msg('Removing the applications')
