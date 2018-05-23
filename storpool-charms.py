@@ -173,13 +173,10 @@ def checkout_repository(cfg, name, branches):
         exit('Could not check for the existence of the {name} '
              'StorPool repository at {url}: {e}'
              .format(name=name, url=url, e=e))
-    sp_msg('Checking out {url}'.format(url=url))
+    branch = branches.get(name, 'master')
+    sp_msg('Checking out {url} branch {branch}'.format(url=url, branch=branch))
     try:
-        branch = branches.get(name)
-        if branch is not None:
-            sp_run(cfg, ['git', 'clone', '-b', branch, '--', url])
-        else:
-            sp_run(cfg, ['git', 'clone', '--', url])
+        sp_run(cfg, ['git', 'clone', '-b', branch, '--', url])
     except Exception:
         exit('Could not check out the {name} module'.format(name=name))
 
