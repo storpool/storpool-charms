@@ -62,7 +62,6 @@ Config = collections.namedtuple('Config', [
                                            'basedir',
                                            'baseurl',
                                            'branches_file',
-                                           'suffix',
                                            'noop',
                                            'space',
                                            'skip',
@@ -718,93 +717,6 @@ def cmd_upgrade(cfg):
     sp_msg('')
 
 
-def cmd_dist(cfg):
-    if cfg.suffix is None or cfg.suffix == '':
-        exit('No distribution suffix (-s) specified')
-    basedir = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
-    dist_name = 'storpool-charms-{series}-{suffix}'.format(series=charm_series,
-                                                           suffix=cfg.suffix)
-    dist_path = '{base}/{name}'.format(base=cfg.basedir, name=dist_name)
-    dist_tar_temp = '{name}.tar'.format(name=dist_name)
-    dist_tarball = '{tar}.xz'.format(tar=dist_tar_temp)
-    sp_msg('Creating {tarball} in {basedir}'
-           .format(tarball=dist_tarball, basedir=cfg.basedir))
-
-    sp_msg('Copying the charms tree {base}'.format(base=basedir))
-    sp_run(cfg, ['rm', '-rf', '--', dist_path])
-    sp_mkdir(cfg, dist_path)
-    sp_run(cfg, [
-        'cp', '-Rp', '--',
-        basedir,
-        '{dist}/{subdir}'.format(dist=dist_path, subdir=subdir),
-    ])
-
-    sp_msg('Copying the storpool-charms helper tools')
-    for fname in subprocess.check_output([
-                                          'git',
-                                          'ls-files'
-                                         ]).decode().split('\n'):
-        if fname == '':
-            continue
-        sp_run(cfg, ['cp', '-p', '--', fname,
-                     '{dist}/{fname}'.format(dist=dist_path, fname=fname)])
-
-    vers = subprocess.check_output([
-                                    'git',
-                                    'describe'
-                                   ]).decode().split('\n', 1)[0]
-    versions = {'storpool-charms': vers}
-
-    sp_chdir(cfg, '{dist}/{subdir}'.format(dist=dist_path, subdir=subdir))
-    if cfg.noop:
-        sp_msg('(would gather the charm versions)')
-    else:
-        sp_msg('Gathering the charm versions')
-        charm_subdirs = []
-        for root, dirs, _ in os.walk('.'):
-            comp = root.split('/')
-            if len(comp) == 1:
-                for extra in filter(lambda s: s not in (
-                                                        'charms',
-                                                        'layers',
-                                                        'interfaces'
-                                                       ), dirs):
-                    dirs.remove(extra)
-            elif len(comp) == 3:
-                (c_type, c_name) = comp[-2:]
-                if c_name.startswith(c_type[:-1]):
-                    path = '/'.join([c_type, c_name])
-                    charm_subdirs.append(path)
-                # Right, Python 2 doesn't have clear(), either.
-                while dirs:
-                    dirs.pop()
-
-        for path in charm_subdirs:
-            sp_chdir(cfg, path)
-            name = path.split('/')[-1]
-            vers = subprocess.check_output([
-                                            'git', 'describe'
-                                           ]).decode().split('\n', 1)[0]
-            versions[name] = vers
-            sp_chdir(cfg, '../..')
-
-        with open('versions.txt', mode='w') as f:
-            f.writelines(map(lambda e: '{name}\t{vers}\n'
-                             .format(name=e[0], vers=e[1]),
-                             sorted(six.iteritems(versions))))
-
-    sp_msg('Creating the tarball')
-    sp_chdir(cfg, '../..')
-    sp_run(cfg, ['rm', '-f', '--', dist_tar_temp, dist_tarball])
-    sp_run(cfg, ['tar', 'cf', dist_tar_temp, dist_name])
-    sp_run(cfg, ['xz', '-9', '--', dist_tar_temp])
-    sp_run(cfg, ['rm', '-rf', '--', dist_tar_temp, dist_name])
-
-    sp_msg('Created {base}/{tarball}'
-           .format(tarball=dist_tarball, base=cfg.basedir))
-    sp_msg('')
-
-
 def juju_ssh_single_line(cmd):
     output = subprocess.check_output(cmd).decode()
     lines = output.split('\n')
@@ -1235,7 +1147,6 @@ def cmd_deploy_test(cfg):
 commands = {
     'build': cmd_build,
     'deploy': cmd_deploy,
-    'dist': cmd_dist,
     'checkout': cmd_checkout,
     'pull': cmd_pull,
     'undeploy': cmd_undeploy,
@@ -1262,7 +1173,6 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] [-d basedir] pull
     storpool-charms [-N] [-d basedir] test
     storpool-charms [-N] [-d basedir] build
-    storpool-charms [-N] [-d basedir] dist
 
 A {subdir} directory will be created in the specified base directory.
 For the "checkout" and "pull" commands, specifying "-X tox" will not run
@@ -1275,8 +1185,6 @@ parser.add_argument('-N', '--noop', action='store_true',
                     help='no-operation mode, display what would be done')
 parser.add_argument('-S', '--space',
                     help='specify the name of the StorPool network space')
-parser.add_argument('-s', '--suffix',
-                    help='specify the suffix for the distribution name')
 parser.add_argument('-U', '--baseurl', default=baseurl,
                     help='specify the base URL for the StorPool Git '
                     'repositories')
@@ -1293,7 +1201,6 @@ cfg = Config(
     basedir=args.basedir,
     baseurl=args.baseurl,
     branches_file=args.branches_file,
-    suffix=args.suffix,
     noop=args.noop,
     space=args.space,
     skip=args.skip,
