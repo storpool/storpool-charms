@@ -52,7 +52,6 @@ charm_data = \
         },
     }
 charm_names = sorted(charm_data.keys())
-charm_series = 'xenial'
 re_elem = re.compile('(?P<type> (?: layer | interface ) ) : '
                      '(?P<name> [a-z][a-z-]* ) $',
                      re.X)
@@ -63,6 +62,7 @@ Config = collections.namedtuple('Config', [
                                            'baseurl',
                                            'branches_file',
                                            'noop',
+                                           'series',
                                            'space',
                                            'skip',
                                            'repo_auth',
@@ -415,16 +415,16 @@ def cmd_test(cfg):
     sp_msg('')
 
 
-def charm_build_dir(basedir, name):
+def charm_build_dir(basedir, name, series):
     return '{base}/built/{series}/{name}'.format(base=basedir,
-                                                 series=charm_series,
+                                                 series=series,
                                                  name=name)
 
 
-def charm_deploy_dir(basedir, name):
+def charm_deploy_dir(basedir, name, series):
     return '{build}/{series}/{name}' \
-        .format(build=charm_build_dir(basedir, name),
-                series=charm_series,
+        .format(build=charm_build_dir(basedir, name, series),
+                series=series,
                 name=name)
 
 
@@ -444,7 +444,7 @@ def cmd_build(cfg):
         sp_msg('Building the {name} charm'.format(name=name))
         sp_chdir(cfg, name)
         short_name = name.replace('charm-', '')
-        build_dir = charm_build_dir(basedir, short_name)
+        build_dir = charm_build_dir(basedir, short_name, cfg.series)
         sp_msg('- recreating the build directory')
         sp_run(cfg, ['rm', '-rf', '--', build_dir])
         sp_makedirs(cfg, build_dir, mode=0o755)
@@ -453,7 +453,7 @@ def cmd_build(cfg):
             'env',
             'LAYER_PATH={basedir}/layers'.format(basedir=basedir),
             'INTERFACE_PATH={basedir}/interfaces'.format(basedir=basedir),
-            'charm', 'build', '-s', charm_series, '-n', short_name,
+            'charm', 'build', '-s', cfg.series, '-n', short_name,
             '-o', build_dir
         ])
         sp_chdir(cfg, '../')
@@ -579,7 +579,7 @@ def cmd_deploy(cfg):
                  'juju',
                  'deploy',
                  '--',
-                 charm_deploy_dir(basedir, 'storpool-block')
+                 charm_deploy_dir(basedir, 'storpool-block', cfg.series)
                 ])
 
     sp_msg('Linking the storpool-block charm with the {nova} charm'
@@ -603,7 +603,8 @@ def cmd_deploy(cfg):
                          '--to',
                          ','.join(st.cinder_machines),
                          '--',
-                         charm_deploy_dir(basedir, 'storpool-candleholder')
+                         charm_deploy_dir(basedir, 'storpool-candleholder',
+                         cfg.series)
                         ])
 
             sp_msg('Linking the storpool-candleholder charm with '
@@ -632,7 +633,7 @@ def cmd_deploy(cfg):
                  'juju',
                  'deploy',
                  '--',
-                 charm_deploy_dir(basedir, 'cinder-storpool')
+                 charm_deploy_dir(basedir, 'cinder-storpool', cfg.series)
                 ])
 
     sp_msg('Linking the cinder-storpool charm with the {cinder} charm'
@@ -708,7 +709,7 @@ def cmd_upgrade(cfg):
                      'juju',
                      'upgrade-charm',
                      '--path',
-                     charm_deploy_dir(basedir, name),
+                     charm_deploy_dir(basedir, name, cfg.series),
                      '--',
                      name
                     ])
@@ -1161,8 +1162,8 @@ commands = {
 parser = argparse.ArgumentParser(
     prog='storpool-charms',
     usage='''
-    storpool-charms [-N] [-d basedir] deploy
-    storpool-charms [-N] [-d basedir] upgrade
+    storpool-charms [-N] [-d basedir] [-s series] deploy
+    storpool-charms [-N] [-d basedir] [-s series] upgrade
     storpool-charms [-N] [-d basedir] undeploy
 
     storpool-charms [-N] -S storpool-space generate-config
@@ -1172,7 +1173,7 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] [-B branches-file] [-d basedir] checkout
     storpool-charms [-N] [-d basedir] pull
     storpool-charms [-N] [-d basedir] test
-    storpool-charms [-N] [-d basedir] build
+    storpool-charms [-N] [-d basedir] [-s series] build
 
 A {subdir} directory will be created in the specified base directory.
 For the "checkout" and "pull" commands, specifying "-X tox" will not run
@@ -1183,6 +1184,8 @@ parser.add_argument('-d', '--basedir', default='.',
                     help='specify the base directory for the charms tree')
 parser.add_argument('-N', '--noop', action='store_true',
                     help='no-operation mode, display what would be done')
+parser.add_argument('-s', '--series', default='xenial',
+                    help='specify the name of the series to build for')
 parser.add_argument('-S', '--space',
                     help='specify the name of the StorPool network space')
 parser.add_argument('-U', '--baseurl', default=baseurl,
@@ -1202,6 +1205,7 @@ cfg = Config(
     baseurl=args.baseurl,
     branches_file=args.branches_file,
     noop=args.noop,
+    series=args.series,
     space=args.space,
     skip=args.skip,
     repo_auth=args.repo_auth,
