@@ -7,7 +7,6 @@ import collections
 import json
 import os
 import re
-import requests
 import subprocess
 import tempfile
 import time
@@ -135,31 +134,8 @@ def sp_run(cfg, command):
     subprocess.check_call(command)
 
 
-def check_repository(cfg, url):
-    comp = requests.utils.urlparse(url)
-    if comp.scheme in ('http', 'https'):
-        if cfg.noop:
-            sp_msg('(would send an HTTP request to {url})'.format(url=url))
-        else:
-            return requests.request('GET', url).ok
-    elif comp.scheme in ('', 'file'):
-        return os.path.isdir(comp.path)
-    else:
-        # Leave it for the actual "git clone" to figure out
-        # whether this exists.
-        return True
-
-
 def checkout_repository(cfg, name, branches):
     url = '{base}/{name}.git'.format(base=cfg.baseurl, name=name)
-    try:
-        if not check_repository(cfg, url):
-            exit('The {name} StorPool repository does not seem to '
-                 'exist at {url}'.format(name=name, url=url))
-    except Exception as e:
-        exit('Could not check for the existence of the {name} '
-             'StorPool repository at {url}: {e}'
-             .format(name=name, url=url, e=e))
     branch = branches.get(name, 'master')
     sp_msg('Checking out {url} branch {branch}'.format(url=url, branch=branch))
     try:
