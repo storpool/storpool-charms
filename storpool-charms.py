@@ -757,7 +757,7 @@ def cmd_generate_config(cfg):
     print(get_storpool_config(cfg))
 
 
-def get_charm_config(stack, conf, bypass):
+def get_charm_config(cfg, stack, conf, bypass):
     ch = {
         'storpool-block': {
             'handle_lxc': bool(stack.cinder_lxd),
@@ -786,7 +786,7 @@ def cmd_generate_charm_config(cfg):
     status = get_juju_status()
     stack = get_stack_config(cfg, status)
     conf = get_storpool_config(cfg, status=status)
-    charmconf = get_charm_config(stack, conf, [])
+    charmconf = get_charm_config(cfg, stack, conf, [])
     print(charmconf)
 
 
@@ -998,7 +998,7 @@ def cmd_deploy_test(cfg):
     sp_msg('Generated a config file:\n{conf}'.format(conf=conf))
 
     sp_msg('Generate a full StorPool charms configuration')
-    charmconf = get_charm_config(stack, conf, bypass)
+    charmconf = get_charm_config(cfg, stack, conf, bypass)
     sp_msg('Generated charms configuration:\n{conf}'.format(conf=charmconf))
 
     def configure(charm):
@@ -1103,7 +1103,7 @@ def cmd_deploy_test(cfg):
         check_systemd_units(stack, False)
 
 
-commands = {
+COMMANDS = {
     'build': cmd_build,
     'deploy': cmd_deploy,
     'checkout': cmd_checkout,
@@ -1117,58 +1117,63 @@ commands = {
 }
 
 
-parser = argparse.ArgumentParser(
-    prog='storpool-charms',
-    usage='''
-    storpool-charms [-N] [-d basedir] [-s series] deploy
-    storpool-charms [-N] [-d basedir] [-s series] upgrade
-    storpool-charms [-N] [-d basedir] undeploy
+def main():
+    parser = argparse.ArgumentParser(
+        prog='storpool-charms',
+        usage='''
+        storpool-charms [-N] [-d basedir] [-s series] deploy
+        storpool-charms [-N] [-d basedir] [-s series] upgrade
+        storpool-charms [-N] [-d basedir] undeploy
 
-    storpool-charms [-N] -S storpool-space generate-config
-    storpool-charms [-N] -S storpool-space -A repo_auth generate-charm-config
-    storpool-charms [-N] -S storpool-space -A repo_auth deploy-test
+        storpool-charms [-N] -S storpool-space generate-config
+        storpool-charms [-N] -S storpool-space -A repo_auth generate-charm-config
+        storpool-charms [-N] -S storpool-space -A repo_auth deploy-test
 
-    storpool-charms [-N] [-B branches-file] [-d basedir] checkout
-    storpool-charms [-N] [-d basedir] pull
-    storpool-charms [-N] [-d basedir] test
-    storpool-charms [-N] [-d basedir] [-s series] build
+        storpool-charms [-N] [-B branches-file] [-d basedir] checkout
+        storpool-charms [-N] [-d basedir] pull
+        storpool-charms [-N] [-d basedir] test
+        storpool-charms [-N] [-d basedir] [-s series] build
 
-The "-A repo_auth" option accepts a "repo_username:repo_password" parameter.
+    The "-A repo_auth" option accepts a "repo_username:repo_password" parameter.
 
-A {subdir} directory will be created in the specified base directory.
-For the "checkout" and "pull" commands, specifying "-X tox" will not run
-the automated tests immediately after everything has been updated.'''
-    .format(subdir=subdir),
-)
-parser.add_argument('-d', '--basedir', default='.',
-                    help='specify the base directory for the charms tree')
-parser.add_argument('-N', '--noop', action='store_true',
-                    help='no-operation mode, display what would be done')
-parser.add_argument('-s', '--series', default='xenial',
-                    help='specify the name of the series to build for')
-parser.add_argument('-S', '--space',
-                    help='specify the name of the StorPool network space')
-parser.add_argument('-U', '--baseurl', default=baseurl,
-                    help='specify the base URL for the StorPool Git '
-                    'repositories')
-parser.add_argument('-X', '--skip',
-                    help='specify stages to skip during the deploy test')
-parser.add_argument('-A', '--repo-auth',
-                    help='specify the StorPool repository authentication data')
-parser.add_argument('-B', '--branches-file',
-                    help='specify the YAML file listing the branches to '
-                         'check out')
-parser.add_argument('command', choices=sorted(commands.keys()))
+    A {subdir} directory will be created in the specified base directory.
+    For the "checkout" and "pull" commands, specifying "-X tox" will not run
+    the automated tests immediately after everything has been updated.'''
+        .format(subdir=subdir),
+    )
+    parser.add_argument('-d', '--basedir', default='.',
+                        help='specify the base directory for the charms tree')
+    parser.add_argument('-N', '--noop', action='store_true',
+                        help='no-operation mode, display what would be done')
+    parser.add_argument('-s', '--series', default='xenial',
+                        help='specify the name of the series to build for')
+    parser.add_argument('-S', '--space',
+                        help='specify the name of the StorPool network space')
+    parser.add_argument('-U', '--baseurl', default=baseurl,
+                        help='specify the base URL for the StorPool Git '
+                        'repositories')
+    parser.add_argument('-X', '--skip',
+                        help='specify stages to skip during the deploy test')
+    parser.add_argument('-A', '--repo-auth',
+                        help='specify the StorPool repository authentication data')
+    parser.add_argument('-B', '--branches-file',
+                        help='specify the YAML file listing the branches to '
+                             'check out')
+    parser.add_argument('command', choices=sorted(COMMANDS.keys()))
 
-args = parser.parse_args()
-cfg = Config(
-    basedir=args.basedir,
-    baseurl=args.baseurl,
-    branches_file=args.branches_file,
-    noop=args.noop,
-    series=args.series,
-    space=args.space,
-    skip=args.skip,
-    repo_auth=args.repo_auth,
-)
-commands[args.command](cfg)
+    args = parser.parse_args()
+    cfg = Config(
+        basedir=args.basedir,
+        baseurl=args.baseurl,
+        branches_file=args.branches_file,
+        noop=args.noop,
+        series=args.series,
+        space=args.space,
+        skip=args.skip,
+        repo_auth=args.repo_auth,
+    )
+    COMMANDS[args.command](cfg)
+
+
+if __name__ == '__main__':
+    main()
