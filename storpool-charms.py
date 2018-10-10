@@ -1096,7 +1096,8 @@ def main():
         storpool-charms [-N] [-d basedir] undeploy
 
         storpool-charms [-N] -S storpool-space generate-config
-        storpool-charms [-N] -S storpool-space -A repo_auth generate-charm-config
+        storpool-charms [-N] -S storpool-space -A repo_auth \
+generate-charm-config
         storpool-charms [-N] -S storpool-space -A repo_auth deploy-test
 
         storpool-charms [-N] [-B branches-file] [-d basedir] checkout
@@ -1104,7 +1105,7 @@ def main():
         storpool-charms [-N] [-d basedir] test
         storpool-charms [-N] [-d basedir] [-s series] build
 
-    The "-A repo_auth" option accepts a "repo_username:repo_password" parameter.
+    The "-A repo_auth" option accepts a repo_username:repo_password parameter.
 
     A {subdir} directory will be created in the specified base directory.
     For the "checkout" and "pull" commands, specifying "-X tox" will not run
@@ -1125,7 +1126,8 @@ def main():
     parser.add_argument('-X', '--skip',
                         help='specify stages to skip during the deploy test')
     parser.add_argument('-A', '--repo-auth',
-                        help='specify the StorPool repository authentication data')
+                        help='specify the StorPool repository '
+                        'authentication data')
     parser.add_argument('-B', '--branches-file',
                         help='specify the YAML file listing the branches to '
                              'check out')
