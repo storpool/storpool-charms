@@ -67,13 +67,13 @@ Config = collections.namedtuple('Config', [
 ])
 
 
-class Element(object):
-    def __init__(self, name, type, parent_dir, fname, exists):
-        self.name = name
-        self.type = type
-        self.parent_dir = parent_dir
-        self.fname = fname
-        self.exists = exists
+Element = collections.namedtuple('Element', [
+    'name',
+    'type',
+    'parent_dir',
+    'fname',
+    'exists',
+])
 
 
 StackConfig = collections.namedtuple('StackConfig', [
