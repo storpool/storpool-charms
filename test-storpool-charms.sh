@@ -54,5 +54,5 @@ for python in python2 python3; do
 
 	do_test "$python" "$common -N deploy"
 
-    do_test "$python" "$common -S $space generate-config"
+	do_test "$python" "$common -S $space generate-config"
 done
