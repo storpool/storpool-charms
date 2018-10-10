@@ -22,7 +22,7 @@ do_test() {
 	printf '\n\n======== "%s %s %s" succeeded\n\n' "$python" "$spcharms" "$args"
 }
 
-for python in python2 python3; do
+for python in python3; do
 	rm -rf -- "$testdir"
 	do_test "$python" "$common --help"
 	if [ -e "$testdir" ]; then
@@ -37,7 +37,7 @@ for python in python2 python3; do
 	fi
 done
 
-for python in python2 python3; do
+for python in python3; do
 	rm -rf -- "$testdir"
 	mkdir -- "$testdir"
 	do_test "$python" "$common checkout"
