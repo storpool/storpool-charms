@@ -12,7 +12,6 @@ import subprocess
 import tempfile
 import time
 import yaml
-import six
 
 baseurl = 'https://github.com/storpool'
 subdir = 'storpool-charms'
@@ -261,10 +260,10 @@ def sp_recurse(cfg, process_charm, process_element):
         if not to_process:
             sp_msg('No more layers or interfaces to process')
             break
-        processing = six.itervalues({
+        processing = {
             elem.fname: elem for elem in to_process
             if elem.fname not in processed and not elem.exists
-        })
+        }.values()
         to_process = []
         for elem in processing:
             sp_chdir(cfg, elem.parent_dir)
@@ -464,7 +463,7 @@ def cmd_build(cfg):
 
 
 def find_charm(apps, names):
-    charms_list = [elem for elem in six.iteritems(apps)
+    charms_list = [elem for elem in apps.items()
                    if elem[1]['charm-name'] in names]
     if len(charms_list) == 0:
         exit('Could not find a {names} charm deployed under any name'
@@ -482,8 +481,8 @@ def get_stack_config(cfg, status):
     compute_charm = find_charm(status['applications'],
                                ('nova-compute', 'nova-compute-kvm'))
     nova_machines = sorted([
-        unit['machine'] for unit in six.itervalues(
-            status['applications'][compute_charm]['units'])
+        unit['machine']
+        for unit in status['applications'][compute_charm]['units'].values()
     ])
     bad_nova_machines = [mach for mach in nova_machines if '/' in mach]
     if bad_nova_machines:
@@ -493,8 +492,8 @@ def get_stack_config(cfg, status):
 
     storage_charm = find_charm(status['applications'], ('cinder'))
     cinder_machines = sorted([
-        unit['machine'] for unit in six.itervalues(
-            status['applications'][storage_charm]['units'])
+        unit['machine']
+        for unit in status['applications'][storage_charm]['units'].values()
     ])
     cinder_lxd = []
     cinder_bare = []
@@ -727,15 +726,15 @@ SP_EXPECTED_NODES=3
 SP_NODE_NON_VOTING=1
 """
 
-    def correct_space(item):
-        return item[1].get('space', None) == cfg.space
+    def correct_space(ifdata):
+        return ifdata.get('space', None) == cfg.space
 
     for (oid, tgt) in enumerate(sorted(stack.all_targets)):
         name = juju_ssh_single_line(['juju', 'ssh', tgt, 'hostname'])
         mach = status['machines'][tgt]
         ifaces = [iface[0]
-                  for iface in six.iteritems(mach['network-interfaces'])
-                  if correct_space(iface)]
+                  for iface in mach['network-interfaces'].items()
+                  if correct_space(iface[1])]
         if not ifaces:
             exit('Could not find any "{sp}" interfaces on {name} ({tgt}, {a})'
                  .format(sp=cfg.space, name=name, tgt=tgt, a=mach['dns-name']))
@@ -805,7 +804,7 @@ def deploy_wait(idx):
             stati = [d['application-status']]
             if 'units' in d:
                 stati.extend([unit['workload-status']
-                              for unit in six.itervalues(d['units'])])
+                              for unit in d['units'].values()])
 
             charm_pending = False
             for sta in stati:
@@ -846,7 +845,7 @@ def undeploy_wait():
             stati = [d['application-status']]
             if 'units' in d:
                 stati.extend([unit['workload-status']
-                              for unit in six.itervalues(d['units'])])
+                              for unit in d['units'].values()])
 
             charm_pending = False
             for sta in stati:
