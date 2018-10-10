@@ -58,15 +58,15 @@ re_elem = re.compile('(?P<type> (?: layer | interface ) ) : '
 
 
 Config = collections.namedtuple('Config', [
-                                           'basedir',
-                                           'baseurl',
-                                           'branches_file',
-                                           'noop',
-                                           'series',
-                                           'space',
-                                           'skip',
-                                           'repo_auth',
-                                          ])
+    'basedir',
+    'baseurl',
+    'branches_file',
+    'noop',
+    'series',
+    'space',
+    'skip',
+    'repo_auth',
+])
 
 
 class Element(object):
@@ -79,20 +79,20 @@ class Element(object):
 
 
 StackConfig = collections.namedtuple('StackConfig', [
-                                                     'compute_charm',
-                                                     'storage_charm',
+    'compute_charm',
+    'storage_charm',
 
-                                                     'cinder_bare',
-                                                     'cinder_lxd',
-                                                     'cinder_machines',
-                                                     'cinder_targets',
+    'cinder_bare',
+    'cinder_lxd',
+    'cinder_machines',
+    'cinder_targets',
 
-                                                     'nova_machines',
-                                                     'nova_targets',
+    'nova_machines',
+    'nova_targets',
 
-                                                     'all_machines',
-                                                     'all_targets',
-                                                    ])
+    'all_machines',
+    'all_targets',
+])
 
 
 def sp_msg(s):
@@ -374,7 +374,8 @@ def cmd_pull(cfg):
 
 def cmd_test(cfg):
     subdir_full = '{base}/{subdir}'.format(base=cfg.basedir, subdir=subdir)
-    sp_msg('Running tox tests for the charms in the {d} directory'.format(d=subdir_full))
+    sp_msg('Running tox tests for the charms in the {d} directory'
+           .format(d=subdir_full))
     try:
         sp_chdir(cfg, subdir_full)
     except Exception as e:
@@ -495,8 +496,8 @@ def get_stack_config(cfg, status):
     cinder_machines = sorted(map(lambda e: e['machine'],
                                  six.itervalues(status[
                                      'applications'][
-                                     storage_charm][
-                                     'units'])))
+                                         storage_charm][
+                                             'units'])))
     cinder_lxd = []
     cinder_bare = []
     for machine in cinder_machines:
@@ -529,20 +530,20 @@ def get_stack_config(cfg, status):
     all_targets = cinder_targets.union(nova_targets)
 
     return StackConfig(
-                       compute_charm=compute_charm,
-                       storage_charm=storage_charm,
+        compute_charm=compute_charm,
+        storage_charm=storage_charm,
 
-                       cinder_lxd=cinder_lxd,
-                       cinder_bare=cinder_bare,
-                       cinder_machines=cinder_machines,
-                       cinder_targets=cinder_targets,
+        cinder_lxd=cinder_lxd,
+        cinder_bare=cinder_bare,
+        cinder_machines=cinder_machines,
+        cinder_targets=cinder_targets,
 
-                       nova_machines=nova_machines,
-                       nova_targets=nova_targets,
+        nova_machines=nova_machines,
+        nova_targets=nova_targets,
 
-                       all_machines=all_machines,
-                       all_targets=all_targets,
-                      )
+        all_machines=all_machines,
+        all_targets=all_targets,
+    )
 
 
 def get_juju_status():
@@ -576,45 +577,36 @@ def cmd_deploy(cfg):
 
     sp_msg('Deploying the storpool-block charm')
     sp_run(cfg, [
-                 'juju',
-                 'deploy',
-                 '--',
-                 charm_deploy_dir(basedir, 'storpool-block', cfg.series)
-                ])
+        'juju', 'deploy', '--',
+        charm_deploy_dir(basedir, 'storpool-block', cfg.series)
+    ])
 
     sp_msg('Linking the storpool-block charm with the {nova} charm'
            .format(nova=st.compute_charm))
     sp_run(cfg, [
-                 'juju',
-                 'add-relation',
-                 '{nova}:juju-info'.format(nova=st.compute_charm),
-                 'storpool-block:juju-info'
-                ])
+        'juju', 'add-relation',
+        '{nova}:juju-info'.format(nova=st.compute_charm),
+        'storpool-block:juju-info'
+    ])
 
     if st.cinder_lxd:
         if st.cinder_machines:
             sp_msg('Deploying the storpool-candleholder charm to {machines}'
                    .format(machines=', '.join(st.cinder_machines)))
             sp_run(cfg, [
-                         'juju',
-                         'deploy',
-                         '-n',
-                         str(len(st.cinder_machines)),
-                         '--to',
-                         ','.join(st.cinder_machines),
-                         '--',
-                         charm_deploy_dir(basedir, 'storpool-candleholder',
-                         cfg.series)
-                        ])
+                'juju', 'deploy', '-n', str(len(st.cinder_machines)),
+                '--to', ','.join(st.cinder_machines), '--',
+                charm_deploy_dir(basedir, 'storpool-candleholder',
+                                 cfg.series)
+            ])
 
             sp_msg('Linking the storpool-candleholder charm with '
                    'the storpool-block charm')
             sp_run(cfg, [
-                         'juju',
-                         'add-relation',
-                         'storpool-candleholder:juju-info',
-                         'storpool-block:juju-info'
-                        ])
+                'juju', 'add-relation',
+                'storpool-candleholder:juju-info',
+                'storpool-block:juju-info'
+            ])
         else:
             sp_msg('Apparently Cinder and Nova are on the same machines; '
                    'skipping the storpool-candleholder deployment')
@@ -622,36 +614,31 @@ def cmd_deploy(cfg):
         sp_msg('Linking the storpool-block charm with the {cinder} charm'
                .format(cinder=st.storage_charm))
         sp_run(cfg, [
-                     'juju',
-                     'add-relation',
-                     '{cinder}:juju-info'.format(cinder=st.storage_charm),
-                     'storpool-block:juju-info'
-                    ])
+            'juju', 'add-relation',
+            '{cinder}:juju-info'.format(cinder=st.storage_charm),
+            'storpool-block:juju-info'
+        ])
 
     sp_msg('Deploying the cinder-storpool charm')
     sp_run(cfg, [
-                 'juju',
-                 'deploy',
-                 '--',
-                 charm_deploy_dir(basedir, 'cinder-storpool', cfg.series)
-                ])
+        'juju', 'deploy', '--',
+        charm_deploy_dir(basedir, 'cinder-storpool', cfg.series)
+    ])
 
     sp_msg('Linking the cinder-storpool charm with the {cinder} charm'
            .format(cinder=st.storage_charm))
     sp_run(cfg, [
-                 'juju',
-                 'add-relation',
-                 '{cinder}:storage-backend'.format(cinder=st.storage_charm),
-                 'cinder-storpool:storage-backend'
-                ])
+        'juju', 'add-relation',
+        '{cinder}:storage-backend'.format(cinder=st.storage_charm),
+        'cinder-storpool:storage-backend'
+    ])
 
     sp_msg('Linking the cinder-storpool charm with the storpool-block charm')
     sp_run(cfg, [
-                 'juju',
-                 'add-relation',
-                 'storpool-block:storpool-presence',
-                 'cinder-storpool:storpool-presence'
-                ])
+        'juju', 'add-relation',
+        'storpool-block:storpool-presence',
+        'cinder-storpool:storpool-presence'
+    ])
 
     sp_msg('The StorPool charms were deployed from {basedir}/{subdir}'
            .format(basedir=cfg.basedir, subdir=subdir))
@@ -706,13 +693,10 @@ def cmd_upgrade(cfg):
     for name in found:
         sp_msg('Upgrading the {name} Juju application'.format(name=name))
         sp_run(cfg, [
-                     'juju',
-                     'upgrade-charm',
-                     '--path',
-                     charm_deploy_dir(basedir, name, cfg.series),
-                     '--',
-                     name
-                    ])
+            'juju', 'upgrade-charm',
+            '--path', charm_deploy_dir(basedir, name, cfg.series), '--',
+            name
+        ])
 
     sp_msg('Upgraded {count} StorPool charms'.format(count=len(found)))
     sp_msg('')
@@ -775,19 +759,19 @@ def cmd_generate_config(cfg):
 
 def get_charm_config(stack, conf, bypass):
     ch = {
-          'storpool-block': {
-                             'handle_lxc': bool(stack.cinder_lxd),
-                             'storpool_version': '16.02.165.c2e3456-1ubuntu1',
-                             'storpool_openstack_version': '1.3.0-1~1ubuntu1',
-                             'storpool_repo_url':
-                             'http://{auth}@repo.storpool.com/storpool-maas/'
-                             .format(auth=cfg.repo_auth),
-                             'storpool_conf': conf,
-                            },
-          'cinder-storpool': {
-                              'storpool_template': 'hybrid-r3',
-                             },
-         }
+        'storpool-block': {
+            'handle_lxc': bool(stack.cinder_lxd),
+            'storpool_version': '16.02.165.c2e3456-1ubuntu1',
+            'storpool_openstack_version': '1.3.0-1~1ubuntu1',
+            'storpool_repo_url':
+            'http://{auth}@repo.storpool.com/storpool-maas/'
+            .format(auth=cfg.repo_auth),
+            'storpool_conf': conf,
+        },
+        'cinder-storpool': {
+            'storpool_template': 'hybrid-r3',
+        },
+    }
 
     if bypass:
         ch['storpool-block']['bypassed_checks'] = ','.join(sorted(bypass))
@@ -896,13 +880,9 @@ def check_systemd_units(stack, expected):
     services = ('storpool_beacon.service', 'storpool_block.service')
     for mach in sorted(stack.all_targets):
         output = subprocess.check_output([
-                                          'juju',
-                                          'ssh',
-                                          mach,
-                                          'systemctl',
-                                          '--no-pager',
-                                          'list-unit-files',
-                                         ]).decode()
+            'juju', 'ssh', mach,
+            'systemctl', '--no-pager', 'list-unit-files',
+        ]).decode()
         found = set()
         for line in output.split('\n'):
             line = line.strip()
@@ -933,22 +913,22 @@ def cmd_deploy_test(cfg):
         exit('No repository username:password (-A) specified')
 
     valid_skip_stages = (
-                         'assert-not-deployed',
-                         'build',
-                         'first-deploy',
-                         'first-deploy-wait',
-                         'first-undeploy',
-                         'first-undeploy-wait',
-                         'second-deploy',
-                         'config-block',
-                         'wait-block',
-                         'check-block',
-                         'config-cinder',
-                         'wait-cinder',
-                         'check-cinder',
-                         'second-undeploy',
-                         'second-undeploy-wait',
-                        )
+        'assert-not-deployed',
+        'build',
+        'first-deploy',
+        'first-deploy-wait',
+        'first-undeploy',
+        'first-undeploy-wait',
+        'second-deploy',
+        'config-block',
+        'wait-block',
+        'check-block',
+        'config-cinder',
+        'wait-cinder',
+        'check-cinder',
+        'second-undeploy',
+        'second-undeploy-wait',
+    )
     if cfg.skip:
         skip_stages = cfg.skip.split(',')
         invalid_skip_stages = list(filter(lambda s: s not in valid_skip_stages,
@@ -968,7 +948,7 @@ def cmd_deploy_test(cfg):
     status = get_juju_status()
     if 'assert-not-deployed' not in skip_stages:
         found = list(filter(lambda s: 'storpool' in s,
-                     status['applications'].keys()))
+                            status['applications'].keys()))
         if found:
             exit('Please remove any StorPool-related charms first; '
                  'found {found}'.format(found=found))
@@ -986,14 +966,9 @@ def cmd_deploy_test(cfg):
 
         sp_msg('  - checking for the number of CPUs')
         first_line = juju_ssh_single_line([
-                                           'juju',
-                                           'ssh',
-                                           name,
-                                           'egrep',
-                                           '-ce',
-                                           '^processor[[:space:]]',
-                                           '/proc/cpuinfo',
-                                          ])
+            'juju', 'ssh', name,
+            'egrep', '-ce', '^processor[[:space:]]', '/proc/cpuinfo',
+        ])
         try:
             cnt = int(first_line)
         except ValueError:
@@ -1005,13 +980,9 @@ def cmd_deploy_test(cfg):
 
         sp_msg('  - checking for the available memory')
         first_line = juju_ssh_single_line([
-                                           'juju',
-                                           'ssh',
-                                           name,
-                                           'head',
-                                           '-n1',
-                                           '/proc/meminfo',
-                                          ])
+            'juju', 'ssh', name,
+            'head', '-n1', '/proc/meminfo',
+        ])
         words = first_line.split()
         if len(words) != 3:
             exit('Unexpected output from the /proc/meminfo check for '
@@ -1038,12 +1009,8 @@ def cmd_deploy_test(cfg):
             print(charmconf, file=tempf, end='')
             tempf.flush()
             subprocess.check_call([
-                                   'juju',
-                                   'config',
-                                   '--file',
-                                   tempf.name,
-                                   charm,
-                                  ])
+                'juju', 'config', '--file', tempf.name, charm,
+            ])
 
     if 'build' not in skip_stages:
         sp_msg('Now running a build')
@@ -1086,13 +1053,9 @@ def cmd_deploy_test(cfg):
         sp_msg('Verifying `storpool_showconf -ne SP_OURID`')
         for (oid, mach) in enumerate(sorted(stack.all_targets)):
             line = juju_ssh_single_line([
-                                         'juju',
-                                         'ssh',
-                                         mach,
-                                         'storpool_showconf',
-                                         '-ne',
-                                         'SP_OURID',
-                                        ])
+                'juju', 'ssh', mach,
+                'storpool_showconf', '-ne', 'SP_OURID',
+            ])
             if not line:
                 exit('Could not run storpool_showconf on machine {mach}'
                      .format(mach=mach))
@@ -1122,14 +1085,9 @@ def cmd_deploy_test(cfg):
         sp_msg('Checking for cinder-storpool in /etc/cinder/cinder.conf')
         for mach in stack.cinder_lxd + stack.cinder_bare:
             line = juju_ssh_single_line([
-                                         'juju',
-                                         'ssh',
-                                         mach,
-                                         'sudo',
-                                         'fgrep',
-                                         'cinder-storpool',
-                                         '/etc/cinder/cinder.conf',
-                                        ])
+                'juju', 'ssh', mach,
+                'sudo', 'fgrep', 'cinder-storpool', '/etc/cinder/cinder.conf',
+            ])
             if not line:
                 exit('No cinder-storpool in /etc/cinder/cinder.conf on '
                      'machine {mach}'.format(mach=mach))
@@ -1167,13 +1125,15 @@ parser = argparse.ArgumentParser(
     storpool-charms [-N] [-d basedir] undeploy
 
     storpool-charms [-N] -S storpool-space generate-config
-    storpool-charms [-N] -S storpool-space -A repo_username:repo_password generate-charm-config
-    storpool-charms [-N] -S storpool-space -A repo_username:repo_password deploy-test
+    storpool-charms [-N] -S storpool-space -A repo_auth generate-charm-config
+    storpool-charms [-N] -S storpool-space -A repo_auth deploy-test
 
     storpool-charms [-N] [-B branches-file] [-d basedir] checkout
     storpool-charms [-N] [-d basedir] pull
     storpool-charms [-N] [-d basedir] test
     storpool-charms [-N] [-d basedir] [-s series] build
+
+The "-A repo_auth" option accepts a "repo_username:repo_password" parameter.
 
 A {subdir} directory will be created in the specified base directory.
 For the "checkout" and "pull" commands, specifying "-X tox" will not run
@@ -1196,7 +1156,8 @@ parser.add_argument('-X', '--skip',
 parser.add_argument('-A', '--repo-auth',
                     help='specify the StorPool repository authentication data')
 parser.add_argument('-B', '--branches-file',
-                    help='specify the YAML file listing the branches to check out')
+                    help='specify the YAML file listing the branches to '
+                         'check out')
 parser.add_argument('command', choices=sorted(commands.keys()))
 
 args = parser.parse_args()
