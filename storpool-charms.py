@@ -192,9 +192,9 @@ def parse_layers(cfg, name, to_process, layers_required):
         exit('Could not load the layer.yaml file from {name}: {e}'
              .format(name=name, e=e))
 
-    for elem in filter(lambda e: e.find('storpool') != -1 or
-                       e == 'interface:cinder-backend',
-                       contents['includes']):
+    for elem in contents['includes']:
+        if elem.find('storpool') == -1 and elem != 'interface:cinder-backend':
+            continue
         m = re_elem.match(elem)
         if m is None:
             exit('Invalid value "{elem}" in the {name} "includes" directive!'
@@ -261,12 +261,10 @@ def sp_recurse(cfg, process_charm, process_element):
         if not to_process:
             sp_msg('No more layers or interfaces to process')
             break
-        processing = six.itervalues(dict(map(
-            lambda e: (e.fname, e),
-            filter(
-                lambda e: e.fname not in processed and not e.exists,
-                to_process)
-        )))
+        processing = six.itervalues({
+            elem.fname: elem for elem in to_process
+            if elem.fname not in processed and not elem.exists
+        })
         to_process = []
         for elem in processing:
             sp_chdir(cfg, elem.parent_dir)
@@ -298,7 +296,7 @@ def cmd_checkout(cfg):
                  .format(fn=fn, e=e))
         if not isinstance(data, dict) or 'branches' not in data or \
            not isinstance(data['branches'], dict) or \
-           list(filter(lambda v: not isinstance(v, str), data['branches'])):
+           [val for val in data['branches'] if not isinstance(val, str)]:
             exit('Invalid format for the branches file {fn}'.format(fn=fn))
         branches = data['branches']
     else:
@@ -466,8 +464,8 @@ def cmd_build(cfg):
 
 
 def find_charm(apps, names):
-    charms_list = list(filter(lambda e: e[1]['charm-name'] in names,
-                              six.iteritems(apps)))
+    charms_list = [elem for elem in six.iteritems(apps)
+                   if elem[1]['charm-name'] in names]
     if len(charms_list) == 0:
         exit('Could not find a {names} charm deployed under any name'
              .format(names=' or '.join(names)))
@@ -483,21 +481,21 @@ def get_stack_config(cfg, status):
     """
     compute_charm = find_charm(status['applications'],
                                ('nova-compute', 'nova-compute-kvm'))
-    nova_machines = sorted(map(lambda e: e['machine'],
-                               six.itervalues(status[
-                                   'applications'][compute_charm]['units'])))
-    bad_nova_machines = list(filter(lambda s: '/' in s, nova_machines))
+    nova_machines = sorted([
+        unit['machine'] for unit in six.itervalues(
+            status['applications'][compute_charm]['units'])
+    ])
+    bad_nova_machines = [mach for mach in nova_machines if '/' in mach]
     if bad_nova_machines:
         exit('Nova deployed in a container or VM ({machines}) is not supported'
              .format(machines=','.join(bad_nova_machines)))
     nova_targets = set(nova_machines)
 
     storage_charm = find_charm(status['applications'], ('cinder'))
-    cinder_machines = sorted(map(lambda e: e['machine'],
-                                 six.itervalues(status[
-                                     'applications'][
-                                         storage_charm][
-                                             'units'])))
+    cinder_machines = sorted([
+        unit['machine'] for unit in six.itervalues(
+            status['applications'][storage_charm]['units'])
+    ])
     cinder_lxd = []
     cinder_bare = []
     for machine in cinder_machines:
@@ -517,7 +515,7 @@ def get_stack_config(cfg, status):
         if not cinder_lxd:
             exit('Could not find the "{cinder}" charm deployed on '
                  'any Juju nodes'.format(cinder=storage_charm))
-        cinder_targets = set(map(lambda s: s.split('/', 1)[0], cinder_lxd))
+        cinder_targets = set(lxd.split('/', 1)[0] for lxd in cinder_lxd)
         cinder_machines = sorted(cinder_targets)
 
     if nova_targets.intersection(cinder_targets):
@@ -563,12 +561,11 @@ def cmd_deploy(cfg):
         raise
     basedir = os.getcwd()
 
-    short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+    short_names = [name.replace('charm-', '') for name in charm_names]
 
     sp_msg('Obtaining the current Juju status')
     status = get_juju_status()
-    found = list(filter(lambda name: name in status['applications'],
-                        short_names))
+    found = [name for name in short_names if name in status['applications']]
     if found:
         exit('Found some StorPool charms already installed: {found}'
              .format(found=', '.join(found)))
@@ -646,12 +643,11 @@ def cmd_deploy(cfg):
 
 
 def cmd_undeploy(cfg):
-    short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+    short_names = [name.replace('charm-', '') for name in charm_names]
 
     sp_msg('Obtaining the current Juju status')
     status = get_juju_status()
-    found = list(filter(lambda name: name in status['applications'],
-                        short_names))
+    found = [name for name in short_names if name in status['applications']]
     if not found:
         exit('No StorPool charms are installed')
     else:
@@ -678,12 +674,11 @@ def cmd_upgrade(cfg):
         raise
     basedir = os.getcwd()
 
-    short_names = list(map(lambda s: s.replace('charm-', ''), charm_names))
+    short_names = [name.replace('charm-', '') for name in charm_names]
 
     sp_msg('Obtaining the current Juju status')
     status = get_juju_status()
-    found = list(filter(lambda name: name in status['applications'],
-                        short_names))
+    found = [name for name in short_names if name in status['applications']]
     if not found:
         exit('No StorPool charms are installed')
     else:
@@ -738,9 +733,9 @@ SP_NODE_NON_VOTING=1
     for (oid, tgt) in enumerate(sorted(stack.all_targets)):
         name = juju_ssh_single_line(['juju', 'ssh', tgt, 'hostname'])
         mach = status['machines'][tgt]
-        ifaces = list(map(lambda i: i[0],
-                          filter(correct_space,
-                                 six.iteritems(mach['network-interfaces']))))
+        ifaces = [iface[0]
+                  for iface in six.iteritems(mach['network-interfaces'])
+                  if correct_space(iface)]
         if not ifaces:
             exit('Could not find any "{sp}" interfaces on {name} ({tgt}, {a})'
                  .format(sp=cfg.space, name=name, tgt=tgt, a=mach['dns-name']))
@@ -809,8 +804,8 @@ def deploy_wait(idx):
                 exit('The {name} charm is not there'.format(name=name))
             stati = [d['application-status']]
             if 'units' in d:
-                stati.extend(map(lambda v: v['workload-status'],
-                                 six.itervalues(d['units'])))
+                stati.extend([unit['workload-status']
+                              for unit in six.itervalues(d['units'])])
 
             charm_pending = False
             for sta in stati:
@@ -850,8 +845,8 @@ def undeploy_wait():
                 continue
             stati = [d['application-status']]
             if 'units' in d:
-                stati.extend(map(lambda v: v['workload-status'],
-                                 six.itervalues(d['units'])))
+                stati.extend([unit['workload-status']
+                              for unit in six.itervalues(d['units'])])
 
             charm_pending = False
             for sta in stati:
@@ -931,8 +926,8 @@ def cmd_deploy_test(cfg):
     )
     if cfg.skip:
         skip_stages = cfg.skip.split(',')
-        invalid_skip_stages = list(filter(lambda s: s not in valid_skip_stages,
-                                          skip_stages))
+        invalid_skip_stages = [stage for stage in skip_stages
+                               if stage not in valid_skip_stages]
         if invalid_skip_stages:
             exit('Invalid skip stages "{invalid}" specified; should be one or '
                  'more of {valid}'
@@ -947,8 +942,8 @@ def cmd_deploy_test(cfg):
     sp_msg('Get the current Juju status')
     status = get_juju_status()
     if 'assert-not-deployed' not in skip_stages:
-        found = list(filter(lambda s: 'storpool' in s,
-                            status['applications'].keys()))
+        found = [name for name in status['applications'].keys()
+                 if 'storpool' in name]
         if found:
             exit('Please remove any StorPool-related charms first; '
                  'found {found}'.format(found=found))
