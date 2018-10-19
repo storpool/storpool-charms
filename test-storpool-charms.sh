@@ -2,7 +2,7 @@
 
 set -e
 
-spcharms='./storpool-charms.py'
+spcharms='./spcharms_manage.py'
 testdir='../test'
 common="${SP_CHARMS_REPO+-U $SP_CHARMS_REPO} -d $testdir"
 space="${SP_SPACE:-storpool}"
