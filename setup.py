@@ -67,7 +67,7 @@ setuptools.setup(
     long_description=get_long_description(),
     long_description_content_type='text/markdown',
 
-    author='StorPool',
+    author='Peter Pentchev',
     author_email='openstack-dev@storpool.com',
     url='https://github.com/storpool/storpool-charms/',
 
