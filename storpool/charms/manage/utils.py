@@ -121,7 +121,7 @@ def sp_mkdir(cfg: cconfig.Config, dirname: str) -> None:
     os.mkdir(dirname)
 
 
-def sp_makedirs(cfg: cconfig.Config, dirname: str, mode: int =0o777,
+def sp_makedirs(cfg: cconfig.Config, dirname: str, mode: int = 0o777,
                 exist_ok: bool = False) -> None:
     if cfg.noop:
         sp_msg("# makedirs '{dirname}' mode {mode:04o} exist_ok {exist_ok}"
